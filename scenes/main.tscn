@@ -35,6 +35,8 @@ transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75
 shadow_enabled = true
 
 [node name="World" parent="." instance=ExtResource("2_jyhfs")]
+WORLD_WIDTH_IN_CHUNKS = null
+CHUNK_SIZE = null
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
