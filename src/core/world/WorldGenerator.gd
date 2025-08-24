@@ -86,15 +86,14 @@ func get_height(world_x: float, world_z: float, chunk_height: int) -> float:
 
 	var mid = float(chunk_height) / 2.0
 
-	var mx = _wrap_x(world_x) / float(world_circumference_voxels)
-	var mz = world_z / float(world_circumference_voxels)
-
 	var c = get_continent_value(world_x, world_z)
 	var c01 = (c + 1.0) * 0.5
 	var land_mask = _smoothstep((continent_threshold + 1.0) * 0.5, 1.0, c01)
 
-	var elev_mid = n_elev_mid.get_noise_2d(mx * 4.0, mz * 4.0)
-	var elev_detail = n_elev_detail.get_noise_2d(mx * 16.0, mz * 16.0)
+	# Use scaled world_x/world_z to sample elevation noise.
+	# These factors (0.015, 0.06) define how many cycles appear across the world.
+	var elev_mid = n_elev_mid.get_noise_2d(world_x * 0.015, world_z * 0.015)
+	var elev_detail = n_elev_detail.get_noise_2d(world_x * 0.06, world_z * 0.06)
 
 	var height = mid + elev_mid * base_variation + elev_detail * (base_variation * 0.5) + land_mask * mountain_boost
 
