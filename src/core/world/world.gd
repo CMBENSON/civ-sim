@@ -28,7 +28,7 @@ var is_first_update = true
 var threads = []
 var generation_queue = []
 var results_queue = []
-var chunks_being_generated = {} # Track chunks currently being generated
+var chunks_being_generated = {}
 var max_threads = max(1, OS.get_processor_count() - 1)
 
 var tri_table_copy: Array
@@ -72,10 +72,8 @@ func _process(_delta):
 		var result = results_queue.pop_front()
 		var chunk_pos = result.chunk_position
 		
-		# Remove from being generated list
 		chunks_being_generated.erase(chunk_pos)
 		
-		# Apply the mesh if the chunk still exists
 		if loaded_chunks.has(chunk_pos) and is_instance_valid(loaded_chunks[chunk_pos]):
 			loaded_chunks[chunk_pos].apply_mesh_data(result.voxel_data, result.mesh_arrays, result.biome_data)
 			
@@ -89,7 +87,6 @@ func _process(_delta):
 			if not threads[i].is_started() and not generation_queue.is_empty():
 				var chunk_pos = generation_queue.pop_front()
 				
-				# Skip if chunk is already being generated or no longer loaded
 				if chunks_being_generated.has(chunk_pos) or not loaded_chunks.has(chunk_pos):
 					continue
 				
@@ -103,9 +100,12 @@ func _process(_delta):
 		return
 	
 	var player_pos = player.global_position
-	var wrapped_x = wrapi(int(player_pos.x), 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
-	var new_player_chunk_x = floor(float(wrapped_x) / CHUNK_SIZE)
+	var new_player_chunk_x = floor(player_pos.x / CHUNK_SIZE)
 	var new_player_chunk_z = floor(player_pos.z / CHUNK_SIZE)
+	
+	# Handle wrapping for chunk coordinates
+	new_player_chunk_x = wrapi(int(new_player_chunk_x), 0, WORLD_WIDTH_IN_CHUNKS)
+	
 	var new_player_chunk = Vector2i(new_player_chunk_x, new_player_chunk_z)
 	
 	if new_player_chunk != current_player_chunk:
@@ -157,16 +157,12 @@ func load_chunk(chunk_pos: Vector2i):
 	chunk.chunk_position = chunk_pos
 	chunk.world_material = world_material
 	
-	# Handle cylindrical wrapping for chunk position
-	var actual_x = chunk_pos.x * CHUNK_SIZE
-	if chunk_pos.x >= WORLD_WIDTH_IN_CHUNKS / 2:
-		actual_x -= WORLD_CIRCUMFERENCE_IN_VOXELS
+	# Simple positioning - chunks are placed at their grid position
+	chunk.position = Vector3(chunk_pos.x * CHUNK_SIZE, 0, chunk_pos.y * CHUNK_SIZE)
 	
-	chunk.position = Vector3(float(actual_x), 0, float(chunk_pos.y * CHUNK_SIZE))
 	add_child(chunk)
 	loaded_chunks[chunk_pos] = chunk
 	
-	# Queue for generation if not already queued
 	if not chunk_pos in generation_queue and not chunks_being_generated.has(chunk_pos):
 		generation_queue.append(chunk_pos)
 
@@ -174,20 +170,18 @@ func unload_chunk(chunk_pos: Vector2i):
 	if not loaded_chunks.has(chunk_pos):
 		return
 	
-	# Remove from all queues
 	if chunk_pos in generation_queue:
 		generation_queue.erase(chunk_pos)
 	chunks_being_generated.erase(chunk_pos)
 	
-	# Free the chunk
 	if is_instance_valid(loaded_chunks[chunk_pos]):
 		loaded_chunks[chunk_pos].queue_free()
 	loaded_chunks.erase(chunk_pos)
 
 func get_surface_height(world_x, world_z):
-	var wrapped_x = wrapi(int(world_x), 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
-	var chunk_x = floor(float(wrapped_x) / CHUNK_SIZE)
-	var chunk_z = floor(float(world_z) / CHUNK_SIZE)
+	var chunk_x = floor(world_x / CHUNK_SIZE)
+	var chunk_z = floor(world_z / CHUNK_SIZE)
+	chunk_x = wrapi(int(chunk_x), 0, WORLD_WIDTH_IN_CHUNKS)
 	var chunk_pos = Vector2i(chunk_x, chunk_z)
 	
 	var chunk = loaded_chunks.get(chunk_pos)
@@ -195,8 +189,10 @@ func get_surface_height(world_x, world_z):
 		var noise_val = noise.get_noise_2d(world_x, world_z)
 		return (noise_val * 10) + 32.0
 
-	var local_x = wrapped_x % CHUNK_SIZE
+	var local_x = int(world_x) % CHUNK_SIZE
 	var local_z = int(world_z) % CHUNK_SIZE
+	if local_x < 0:
+		local_x += CHUNK_SIZE
 	if local_z < 0:
 		local_z += CHUNK_SIZE
 
@@ -231,9 +227,9 @@ func get_biome(world_x, world_z):
 		return WorldData.Biome.PLAINS
 
 func edit_terrain(world_pos: Vector3, edit_strength: float):
-	var wrapped_x = wrapi(int(world_pos.x), 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
-	var chunk_x = floor(float(wrapped_x) / CHUNK_SIZE)
-	var chunk_z = floor(float(world_pos.z) / CHUNK_SIZE)
+	var chunk_x = floor(world_pos.x / CHUNK_SIZE)
+	var chunk_z = floor(world_pos.z / CHUNK_SIZE)
+	chunk_x = wrapi(int(chunk_x), 0, WORLD_WIDTH_IN_CHUNKS)
 	var center_chunk_pos = Vector2i(chunk_x, chunk_z)
 	
 	if not loaded_chunks.has(center_chunk_pos):
@@ -244,54 +240,23 @@ func edit_terrain(world_pos: Vector3, edit_strength: float):
 		return
 	
 	# Calculate local position within the chunk
-	var local_x = wrapped_x % CHUNK_SIZE
+	var local_x = int(world_pos.x) % CHUNK_SIZE
 	var local_z = int(world_pos.z) % CHUNK_SIZE
+	if local_x < 0:
+		local_x += CHUNK_SIZE
 	if local_z < 0:
 		local_z += CHUNK_SIZE
 	var local_pos = Vector3(local_x, world_pos.y, local_z)
 	
-	# Edit the center chunk
+	# Edit the center chunk and collect affected chunks
 	var affected_chunks = {}
 	center_chunk.edit_density_data(local_pos, edit_strength, affected_chunks)
 	
-	# Check if we need to update neighboring chunks
-	var edit_radius = 3
-	var chunks_to_update = {}
-	chunks_to_update[center_chunk_pos] = true
-	
-	# Check each neighbor direction
-	if local_x < edit_radius:  # Left edge
-		var left_chunk = Vector2i(wrapi(center_chunk_pos.x - 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y)
-		chunks_to_update[left_chunk] = true
-	if local_x >= CHUNK_SIZE - edit_radius:  # Right edge
-		var right_chunk = Vector2i(wrapi(center_chunk_pos.x + 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y)
-		chunks_to_update[right_chunk] = true
-	if local_z < edit_radius:  # Front edge
-		var front_chunk = Vector2i(center_chunk_pos.x, center_chunk_pos.y - 1)
-		chunks_to_update[front_chunk] = true
-	if local_z >= CHUNK_SIZE - edit_radius:  # Back edge
-		var back_chunk = Vector2i(center_chunk_pos.x, center_chunk_pos.y + 1)
-		chunks_to_update[back_chunk] = true
-	
-	# Corner chunks
-	if local_x < edit_radius and local_z < edit_radius:
-		var corner_chunk = Vector2i(wrapi(center_chunk_pos.x - 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y - 1)
-		chunks_to_update[corner_chunk] = true
-	if local_x >= CHUNK_SIZE - edit_radius and local_z < edit_radius:
-		var corner_chunk = Vector2i(wrapi(center_chunk_pos.x + 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y - 1)
-		chunks_to_update[corner_chunk] = true
-	if local_x < edit_radius and local_z >= CHUNK_SIZE - edit_radius:
-		var corner_chunk = Vector2i(wrapi(center_chunk_pos.x - 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y + 1)
-		chunks_to_update[corner_chunk] = true
-	if local_x >= CHUNK_SIZE - edit_radius and local_z >= CHUNK_SIZE - edit_radius:
-		var corner_chunk = Vector2i(wrapi(center_chunk_pos.x + 1, 0, WORLD_WIDTH_IN_CHUNKS), center_chunk_pos.y + 1)
-		chunks_to_update[corner_chunk] = true
-	
 	# Queue all affected chunks for regeneration
-	for chunk_pos in chunks_to_update:
+	for chunk_pos in affected_chunks:
 		if loaded_chunks.has(chunk_pos) and not chunks_being_generated.has(chunk_pos):
 			if not chunk_pos in generation_queue:
-				generation_queue.push_front(chunk_pos)  # Priority queue for edited chunks
+				generation_queue.push_front(chunk_pos)
 
 func create_biome_texture():
 	var img = Image.create(2, 4, false, Image.FORMAT_RGB8)

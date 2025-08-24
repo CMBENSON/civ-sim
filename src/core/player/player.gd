@@ -19,7 +19,7 @@ var is_editing = false
 func _ready():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	print("Controls:")
-	print("  WASD - Move")
+	print("  WASD/Arrow Keys - Move")
 	print("  Space - Fly up")
 	print("  Ctrl - Fly down")
 	print("  Shift - Speed boost")
@@ -77,8 +77,31 @@ func _physics_process(delta):
 	if Input.is_key_pressed(KEY_SHIFT):
 		current_speed = FLY_SPEED * 3.0
 
-	# Get horizontal movement input
-	var input_dir = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	# Get movement input - using both WASD and arrow keys
+	var input_dir = Vector2.ZERO
+	
+	# WASD input
+	if Input.is_key_pressed(KEY_W):
+		input_dir.y -= 1
+	if Input.is_key_pressed(KEY_S):
+		input_dir.y += 1
+	if Input.is_key_pressed(KEY_A):
+		input_dir.x -= 1
+	if Input.is_key_pressed(KEY_D):
+		input_dir.x += 1
+	
+	# Also check arrow keys as fallback
+	if Input.is_action_pressed("ui_up"):
+		input_dir.y -= 1
+	if Input.is_action_pressed("ui_down"):
+		input_dir.y += 1
+	if Input.is_action_pressed("ui_left"):
+		input_dir.x -= 1
+	if Input.is_action_pressed("ui_right"):
+		input_dir.x += 1
+	
+	input_dir = input_dir.normalized()
+	
 	var direction = (head.transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 	
 	# Apply horizontal velocity
@@ -86,14 +109,14 @@ func _physics_process(delta):
 		velocity.x = direction.x * current_speed
 		velocity.z = direction.z * current_speed
 	else:
-		velocity.x = move_toward(velocity.x, 0, current_speed)
-		velocity.z = move_toward(velocity.z, 0, current_speed)
+		velocity.x = move_toward(velocity.x, 0, current_speed * delta * 3)
+		velocity.z = move_toward(velocity.z, 0, current_speed * delta * 3)
 
 	# Get vertical movement input
 	var vertical_movement = 0.0
-	if Input.is_action_pressed("ui_accept"):  # Spacebar to go up
+	if Input.is_key_pressed(KEY_SPACE):  # Spacebar to go up
 		vertical_movement += current_speed
-	if Input.is_action_pressed("ui_page_down"):  # Ctrl to go down
+	if Input.is_key_pressed(KEY_CTRL):  # Ctrl to go down
 		vertical_movement -= current_speed
 		
 	# Apply vertical velocity
@@ -113,7 +136,6 @@ func perform_terrain_edit():
 	var collision_normal = raycast.get_collision_normal()
 	
 	# Offset the edit point slightly based on the mode
-	# This helps with adding/removing in the right direction
 	if edit_mode == "add":
 		collision_point += collision_normal * 0.5
 	else:  # remove

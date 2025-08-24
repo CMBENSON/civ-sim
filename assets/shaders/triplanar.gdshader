@@ -1,7 +1,6 @@
 shader_type spatial;
-render_mode cull_disabled;
+
 uniform sampler2D texture_atlas;
-// --- FIX: Removed detail_texture and texture_scale uniforms ---
 uniform float blend_sharpness : hint_range(0.0, 10.0) = 2.0; 
 
 varying vec4 mod_color;
@@ -37,9 +36,8 @@ void fragment() {
 	}
 	
 	// 3. Blend between the top and side colors based on the surface normal
-	float blend_factor = pow(NORMAL.y, blend_sharpness);
+	float blend_factor = pow(max(0.0, NORMAL.y), blend_sharpness);
 	vec4 final_color = mix(side_color, top_color, blend_factor);
 	
-	// --- FIX: We now directly output the blended solid color ---
 	ALBEDO = final_color.rgb;
 }
