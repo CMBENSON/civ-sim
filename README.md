@@ -4,7 +4,7 @@
 \*\*Document Information\*\*    
 \- \*\*Version\*\*: 1.1    
 \- \*\*Date\*\*: August 22, 2025    
-\- \*\*Authors\*\*: Grok (xAI) in collaboration with the User    
+\- \*\*Authors\*\*:
 \- \*\*Purpose\*\*: This consolidated GDD merges and refines the three provided design briefs into a single, cohesive blueprint for development. It resolves minor inconsistencies (e.g., engine specified as Godot 4.3+ across all versions, treating the Unity mention as a typo), eliminates redundancies, and expands on incomplete sections like the image prompts. The document is self-contained, ready for prototyping, team handoff, or further iteration. To create a PDF, copy this content into a word processor (e.g., Microsoft Word or Google Docs), apply formatting (headings, bullets, tables), and export as PDF. Estimated length: \~18 pages (12pt font, 1-inch margins).
 
 \#\# Executive Summary  
