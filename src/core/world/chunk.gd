@@ -110,14 +110,16 @@ func generate_mesh(padded_voxel_data):
 				]
 
 				var cube_index = 0
-				if cube_corners[0] < ISO_LEVEL: cube_index |= 1
-				if cube_corners[1] < ISO_LEVEL: cube_index |= 2
-				if cube_corners[2] < ISO_LEVEL: cube_index |= 4
-				if cube_corners[3] < ISO_LEVEL: cube_index |= 8
-				if cube_corners[4] < ISO_LEVEL: cube_index |= 16
-				if cube_corners[5] < ISO_LEVEL: cube_index |= 32
-				if cube_corners[6] < ISO_LEVEL: cube_index |= 64
-				if cube_corners[7] < ISO_LEVEL: cube_index |= 128
+				# --- THIS IS THE FIX ---
+				# Check for values GREATER than the ISO_LEVEL to correctly identify solid ground.
+				if cube_corners[0] > ISO_LEVEL: cube_index |= 1
+				if cube_corners[1] > ISO_LEVEL: cube_index |= 2
+				if cube_corners[2] > ISO_LEVEL: cube_index |= 4
+				if cube_corners[3] > ISO_LEVEL: cube_index |= 8
+				if cube_corners[4] > ISO_LEVEL: cube_index |= 16
+				if cube_corners[5] > ISO_LEVEL: cube_index |= 32
+				if cube_corners[6] > ISO_LEVEL: cube_index |= 64
+				if cube_corners[7] > ISO_LEVEL: cube_index |= 128
 
 				var edges = MarchingCubes.TRI_TABLE[cube_index]
 
@@ -145,11 +147,8 @@ func generate_mesh(padded_voxel_data):
 					st.add_vertex(vert1); st.add_vertex(vert2); st.add_vertex(vert3)
 
 	st.generate_normals()
-	# --- PERFORMANCE FIX ---
-	# Commit the mesh ONCE.
 	var mesh = st.commit()
 	
-	# If the resulting mesh is empty, clear everything and stop.
 	if not mesh or mesh.get_surface_count() == 0:
 		mesh_instance.mesh = null
 		collision_shape.shape = null

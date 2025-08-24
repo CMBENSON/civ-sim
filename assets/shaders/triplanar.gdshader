@@ -32,11 +32,11 @@ void fragment() {
 		side_tex_uv = mountain_rock_uv;
 		float snow_blend = smoothstep(50.0, 58.0, world_pos.y);
 		top_tex_uv = mix(mountain_rock_uv, snow_uv, snow_blend);
-	
+
 	} else if (vertex_color.r > 0.5) { // Tundra (Red channel)
 		top_tex_uv = snow_uv;
 		side_tex_uv = tundra_rock_uv;
-	
+
 	} else if (vertex_color.b > 0.5) { // Desert (Blue channel)
 		top_tex_uv = sand_uv;
 		side_tex_uv = desert_rock_uv;
