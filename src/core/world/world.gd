@@ -12,6 +12,7 @@ const MarchingCubesData = preload("res://src/core/world/marching_cubes.gd")
 @export var WORLD_WIDTH_IN_CHUNKS: int = 32 : set = _set_world_width_in_chunks
 @export var CHUNK_SIZE: int = 32 : set = _set_chunk_size
 @export var WORLD_CIRCUMFERENCE_IN_VOXELS: int = WORLD_WIDTH_IN_CHUNKS * CHUNK_SIZE
+@export var CHUNK_HEIGHT : int = 64
 
 var is_preview = false
 
@@ -180,20 +181,23 @@ func unload_chunk(chunk_pos: Vector2i):
 # --- Query helpers used by player/chunk/mesher ---
 
 func get_surface_height(world_x: float, world_z: float) -> float:
-		# Use generator’s large‑scale rules (continents/ocean/poles)
-		# Fallback to mid height if chunk not loaded yet
-		var chunk = _get_chunk_at_world(world_x, world_z)
-		if not is_instance_valid(chunk) or chunk.voxel_data.is_empty():
-				return generator.get_height(world_x, world_z, chunk.CHUNK_HEIGHT)
-		# Scan local data for the top surface
-		var local_x = int(world_x) % CHUNK_SIZE
-		var local_z = int(world_z) % CHUNK_SIZE
-		if local_x < 0: local_x += CHUNK_SIZE
-		if local_z < 0: local_z += CHUNK_SIZE
-		for y in range(chunk.CHUNK_HEIGHT - 1, -1, -1):
-				if chunk.voxel_data[local_x][y][local_z] > chunk.ISO_LEVEL:
-						return y
-		return generator.sea_level
+	var chunk = _get_chunk_at_world(world_x, world_z)
+	# If no chunk is loaded or its data is empty, call the generator with your known height
+	if not is_instance_valid(chunk) or chunk.voxel_data.is_empty():
+		return generator.get_height(world_x, world_z, CHUNK_HEIGHT)
+
+	# Otherwise scan the loaded chunk for the actual surface
+	var local_x = int(world_x) % CHUNK_SIZE
+	var local_z = int(world_z) % CHUNK_SIZE
+	if local_x < 0: local_x += CHUNK_SIZE
+	if local_z < 0: local_z += CHUNK_SIZE
+
+	for y in range(chunk.CHUNK_HEIGHT - 1, -1, -1):
+		if chunk.voxel_data[local_x][y][local_z] > chunk.ISO_LEVEL:
+			return y
+	return generator.sea_level
+
+
 
 func get_biome(world_x: float, world_z: float) -> int:
 		return generator.get_biome(world_x, world_z)
@@ -239,7 +243,8 @@ func _set_chunk_size(v: int) -> void:
 
 # Called whenever size knobs change (keeps generator/chunking in sync)
 func _on_world_dimensions_changed() -> void:
-		if generator != null:
-				# If you’re using the WorldGenerator from the earlier step:
-				generator.world_circumference_voxels = WORLD_CIRCUMFERENCE_IN_VOXELS
-				generator.chunk_size = CHUNK_SIZE
+	if generator != null:
+		generator.world_circumference_voxels = WORLD_CIRCUMFERENCE_IN_VOXELS
+		generator.chunk_size = CHUNK_SIZE
+		# new line:
+		generator.chunk_height = CHUNK_HEIGHT

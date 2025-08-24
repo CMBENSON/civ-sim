@@ -37,6 +37,7 @@ shadow_enabled = true
 [node name="World" parent="." instance=ExtResource("2_jyhfs")]
 WORLD_WIDTH_IN_CHUNKS = null
 CHUNK_SIZE = null
+CHUNK_HEIGHT = null
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
