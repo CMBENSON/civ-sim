@@ -1,4 +1,4 @@
-# res://src/core/ui/debug_ui.gd
+# debug_ui.gd
 extends Control
 
 @onready var fps_label = $MarginContainer/VBoxContainer/FPSLabel
@@ -24,11 +24,8 @@ func _process(_delta):
 	var world_x = floori(player_pos.x)
 	var world_z = floori(player_pos.z)
 	
-	# --- THIS IS THE CORRECTED LOGIC FOR A CYLINDRICAL WORLD ---
-	# Wrap the world X coordinate to stay within the world's bounds
 	var wrapped_world_x = wrapi(world_x, 0, world.WORLD_CIRCUMFERENCE_IN_VOXELS)
 	
-	# Determine the chunk position based on the wrapped coordinate
 	var c_pos_x = floor(wrapped_world_x / 32.0)
 	var c_pos_z = floor(world_z / 32.0)
 	
@@ -36,16 +33,16 @@ func _process(_delta):
 	
 	var chunk = world.loaded_chunks.get(current_chunk_pos)
 	
-	if is_instance_valid(chunk):
-		# Calculate local coordinates within the chunk
-		var local_x = wrapped_world_x % 32
-		var local_z = world_z % 32
+	if is_instance_valid(chunk) and not chunk.biome_data.is_empty():
+		var local_x = int(wrapped_world_x) % 32
+		var local_z = int(world_z) % 32
 		if local_z < 0: local_z += 32
 		
 		if chunk.biome_data.size() > local_x and chunk.biome_data[local_x].size() > local_z:
 			var biome_enum = chunk.biome_data[local_x][local_z]
-			# --- FIX: Access Biome through the 'world' reference ---
-			var biome_name = world.Biome.keys()[biome_enum]
+			# --- FINAL FIX IS HERE ---
+			# Access the Biome enum through the global WorldData autoload script.
+			var biome_name = WorldData.Biome.keys()[biome_enum]
 			biome_label.text = "Biome: " + biome_name
 		else:
 			biome_label.text = "Biome: Loading..."
