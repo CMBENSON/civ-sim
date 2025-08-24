@@ -217,7 +217,7 @@ func update_chunks():
 		if not loaded_chunks.has(chunk_pos):
 			load_chunk(chunk_pos)
 
-const VIEW_DISTANCE = 3  # Reduced from 4 to 3 for better performance
+const VIEW_DISTANCE = 10  # Reduced from 4 to 3 for better performance
 
 func load_chunk(chunk_pos: Vector2i):
 	if loaded_chunks.has(chunk_pos):
