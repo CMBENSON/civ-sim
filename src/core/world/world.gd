@@ -14,6 +14,7 @@ const MarchingCubesData = preload("res://src/core/world/marching_cubes.gd")
 @export var CHUNK_HEIGHT : int = 256
 
 var is_preview = false
+var verbose_logging: bool = false  # Control debug output
 
 const WorldGenerator = preload("res://src/core/world/WorldGenerator.gd")
 var generator: RefCounted
@@ -41,7 +42,9 @@ func _ready():
 		return
 		
 	world_material.shader = triplanar_shader
-	print("World: Triplanar shader loaded successfully")
+	
+	if verbose_logging:
+		print("World: Triplanar shader loaded successfully")
 
 	# Ensure export variables are properly set
 	WORLD_WIDTH_IN_CHUNKS = 64
@@ -49,24 +52,27 @@ func _ready():
 	CHUNK_HEIGHT = 256
 	WORLD_CIRCUMFERENCE_IN_VOXELS = WORLD_WIDTH_IN_CHUNKS * CHUNK_SIZE
 	
-	print("World dimensions: ", WORLD_WIDTH_IN_CHUNKS, " chunks x ", CHUNK_SIZE, " voxels = ", WORLD_CIRCUMFERENCE_IN_VOXELS, " total voxels")
+	if verbose_logging:
+		print("World dimensions: ", WORLD_WIDTH_IN_CHUNKS, " chunks x ", CHUNK_SIZE, " voxels = ", WORLD_CIRCUMFERENCE_IN_VOXELS, " total voxels")
 
 	# Create a simple generator with the world dimensions
 	generator = WorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
 	generator.chunk_height = CHUNK_HEIGHT
+	generator.verbose_logging = verbose_logging  # Pass verbose flag to generator
 
 	# Optional: tweak sea_level or chunk_height here if needed
 	generator.sea_level = 28.0
 
 	# Print debug info to help diagnose terrain issues (only if verbose logging enabled)
-	if generator.has_method("print_biome_debug_info") and generator.verbose_logging:
+	if generator.has_method("print_biome_debug_info") and verbose_logging:
 		generator.print_biome_debug_info()
 
 	create_biome_texture()
 
 	# Verify material setup
-	print("World: Material shader: ", world_material.shader)
-	print("World: Material resource: ", world_material)
+	if verbose_logging:
+		print("World: Material shader: ", world_material.shader)
+		print("World: Material resource: ", world_material)
 
 	tri_table_copy = MarchingCubesData.TRI_TABLE.duplicate(true)
 	edge_table_copy = MarchingCubesData.EDGE_TABLE.duplicate(true)
@@ -96,16 +102,17 @@ func _process(_delta):
 				is_first_update = false
 				initial_chunks_generated.emit()
 			
-			print("World: Completed generation for chunk ", chunk_pos, " - removed from being_generated")
+			if verbose_logging:
+				print("World: Completed generation for chunk ", chunk_pos)
 
 	# Start new chunk generation if threads are available (rate limited)
 	if not generation_queue.is_empty():
 		var chunks_started_this_frame = 0
 		var max_chunks_per_frame = 4  # Increased from 2 to 4 for better performance
 		
-		# Debug: Show queue state every few frames
-		if Engine.get_process_frames() % 60 == 0:  # Every 60 frames (about once per second)
-			print("World: Process - Queue size: ", generation_queue.size(), ", Being generated: ", chunks_being_generated.size())
+		# Debug: Show queue state every few seconds (only if verbose)
+		if verbose_logging and Engine.get_process_frames() % 180 == 0:  # Every 3 seconds at 60fps
+			print("World: Queue size: ", generation_queue.size(), ", Being generated: ", chunks_being_generated.size())
 		
 		for i in range(threads.size()):
 			if chunks_started_this_frame >= max_chunks_per_frame:
@@ -116,15 +123,17 @@ func _process(_delta):
 
 				# Check if this chunk is already being generated
 				if chunks_being_generated.has(chunk_pos):
-					# Skip this chunk for now - it will be processed when the current generation completes
-					print("World: Skipping chunk ", chunk_pos, " - already being generated")
+					if verbose_logging:
+						print("World: Skipping chunk ", chunk_pos, " - already being generated")
 					continue
 
 				chunks_being_generated[chunk_pos] = true
 				var mesher = VoxelMesher.new(chunk_pos, generator, tri_table_copy, edge_table_copy)
 				threads[i].start(Callable(self, "_thread_function").bind(mesher, threads[i], chunk_pos))
 				chunks_started_this_frame += 1
-				print("World: Started generation for chunk ", chunk_pos, " on thread ", i)
+				
+				if verbose_logging:
+					print("World: Started generation for chunk ", chunk_pos)
 
 	# Update player chunk and load/unload chunks as needed
 	if not is_instance_valid(player):
@@ -145,10 +154,12 @@ func _process(_delta):
 		update_chunks()
 
 func _thread_function(mesher, thread, chunk_pos):
-	print("Starting generation for chunk ", chunk_pos)
+	if verbose_logging:
+		print("Starting generation for chunk ", chunk_pos)
 	var result_data = mesher.run()
 	result_data.chunk_position = chunk_pos
-	print("Completed generation for chunk ", chunk_pos, ". Result: ", result_data.keys())
+	if verbose_logging:
+		print("Completed generation for chunk ", chunk_pos)
 	call_deferred("_handle_thread_result", result_data, thread)
 
 func _handle_thread_result(result_data, thread):
@@ -157,7 +168,8 @@ func _handle_thread_result(result_data, thread):
 
 func _exit_tree():
 	# Properly stop all threads to prevent hanging
-	print("World: Cleaning up threads and chunks...")
+	if verbose_logging:
+		print("World: Cleaning up threads and chunks...")
 	
 	# Clear generation queue first
 	generation_queue.clear()
@@ -165,7 +177,8 @@ func _exit_tree():
 	# Wait for all threads to finish
 	for i in range(threads.size()):
 		if threads[i].is_started():
-			print("World: Waiting for thread ", i, " to finish...")
+			if verbose_logging:
+				print("World: Waiting for thread ", i, " to finish...")
 			threads[i].wait_to_finish()
 	
 	# Clear all loaded chunks
@@ -178,7 +191,8 @@ func _exit_tree():
 	chunks_being_generated.clear()
 	results_queue.clear()
 	
-	print("World: Cleanup complete")
+	if verbose_logging:
+		print("World: Cleanup complete")
 
 func update_chunks():
 	var chunks_to_load = {}
@@ -224,13 +238,11 @@ func load_chunk(chunk_pos: Vector2i):
 	if not chunk_pos in generation_queue and not chunks_being_generated.has(chunk_pos):
 		generation_queue.append(chunk_pos)
 		# Only print for first few chunks to avoid spam
-		if generation_queue.size() <= 10:
+		if verbose_logging and generation_queue.size() <= 10:
 			print("Added chunk ", chunk_pos, " to generation queue. Queue size: ", generation_queue.size())
 	
-	print("World: Loaded chunk at position ", chunk_pos, " (total loaded: ", loaded_chunks.size(), ")")
-	
-	# Debug: Show current state
-	print("World: Load chunk - Queue size: ", generation_queue.size(), ", Being generated: ", chunks_being_generated.size())
+	if verbose_logging:
+		print("World: Loaded chunk at position ", chunk_pos, " (total loaded: ", loaded_chunks.size(), ")")
 
 func unload_chunk(chunk_pos: Vector2i):
 	if not loaded_chunks.has(chunk_pos):
@@ -273,19 +285,21 @@ func get_biome(world_x: float, world_z: float) -> int:
 	return generator.get_biome(world_x, world_z)
 
 func edit_terrain(world_point: Vector3, amount: float) -> void:
-	print("World: edit_terrain called at world point ", world_point, " with amount ", amount)
+	if verbose_logging:
+		print("World: edit_terrain called at world point ", world_point, " with amount ", amount)
 	
 	# Determine which chunk this world point is in (with east-west wrapping)
 	var chunk_x = wrapi(int(floor(world_point.x / CHUNK_SIZE)), 0, WORLD_WIDTH_IN_CHUNKS)
 	var chunk_z = int(floor(world_point.z / CHUNK_SIZE))
 	var chunk_pos = Vector2i(chunk_x, chunk_z)
 	
-	print("World: Calculated chunk position: ", chunk_pos)
+	if verbose_logging:
+		print("World: Calculated chunk position: ", chunk_pos)
 
 	var chunk = loaded_chunks.get(chunk_pos)
 	if not is_instance_valid(chunk):
-		print("World: ERROR - Chunk not found at position ", chunk_pos)
-		print("World: Loaded chunks: ", loaded_chunks.keys())
+		if verbose_logging:
+			print("World: ERROR - Chunk not found at position ", chunk_pos)
 		return
 
 	# Convert to local coordinates within the chunk
@@ -293,13 +307,13 @@ func edit_terrain(world_point: Vector3, amount: float) -> void:
 	var local_y = world_point.y
 	var local_z = world_point.z - float(chunk_pos.y * CHUNK_SIZE)
 	
-	print("World: Converted to local coords: (", local_x, ", ", local_y, ", ", local_z, ")")
+	if verbose_logging:
+		print("World: Converted to local coords: (", local_x, ", ", local_y, ", ", local_z, ")")
 
 	var affected_chunks := {}
 	chunk.edit_density_data(Vector3(local_x, local_y, local_z), amount, affected_chunks)
 
 	# Force regeneration of affected chunks by clearing their generation state
-	# In world.gd edit_terrain(), replace the queue management with:
 	for pos in affected_chunks.keys():
 		if loaded_chunks.has(pos):
 			# Force immediate regeneration
@@ -318,7 +332,8 @@ func edit_terrain(world_point: Vector3, amount: float) -> void:
 					threads[i].start(Callable(self, "_thread_function").bind(mesher, threads[i], pos))
 					break
 
-	print("World: Terrain edit complete. Affected chunks: ", affected_chunks.keys())
+	if verbose_logging:
+		print("World: Terrain edit complete. Affected chunks: ", affected_chunks.keys())
 
 func _get_chunk_at_world(world_x: float, world_z: float):
 	# Proper cylindrical world wrapping: east-west wraps around, north-south extends infinitely
