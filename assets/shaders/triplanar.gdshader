@@ -1,5 +1,5 @@
 shader_type spatial;
-
+render_mode cull_disabled;
 uniform sampler2D texture_atlas;
 // --- FIX: Removed detail_texture and texture_scale uniforms ---
 uniform float blend_sharpness : hint_range(0.0, 10.0) = 2.0; 
