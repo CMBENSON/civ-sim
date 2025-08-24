@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://d0u6ghjb1kbur"]
+
+[ext_resource type="Shader" uid="uid://bywd37findio2" path="res://assets/shaders/triplanar.gdshader" id="1_cokvu"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_cokvu")
+shader_parameter/texture_scale = 10.0
+shader_parameter/blend_sharpness = 1.5
