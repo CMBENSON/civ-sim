@@ -47,9 +47,9 @@ func _ready():
 		generator = WorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
 		# You can tweak these before shipping:
 		generator.sea_level = 28.0
-		generator.continent_threshold = -0.05   # raise for more land
-		generator.mountain_boost = 22.0
-		generator.base_variation = 10.0
+		generator.continent_threshold = 0.0  # 0 = roughly half land, half ocean
+		generator.base_variation = 20.0      # bigger hills
+		generator.mountain_boost = 45.0      # taller mountains
 		generator.pole_influence = 0.6
 		generator.pole_sink = 0.0
 

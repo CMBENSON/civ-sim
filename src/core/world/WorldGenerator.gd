@@ -1,15 +1,15 @@
 # src/core/world/WorldGenerator.gd
 extends RefCounted
 
-# Public tuning knobs (safe defaults)
 var sea_level: float = 28.0
 var world_circumference_voxels: int
 var chunk_size: int
-var pole_influence: float = 0.6          # 0..1, stronger = colder poles
-@export var base_variation := 20.0
-@export var mountain_boost := 45.0
-@export var continent_threshold := 0.0
-var pole_sink: float = 0.0               # optionally lower land near poles
+var pole_influence: float = 0.6
+var base_variation: float = 20.0   # no @export here
+var mountain_boost: float = 45.0
+var continent_threshold: float = 0.0
+var pole_sink: float = 0.0
+var chunk_height: int = 64
 
 # Noises (created in _init)
 var n_continent: FastNoiseLite
