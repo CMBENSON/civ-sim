@@ -28,9 +28,8 @@ void fragment() {
 	vec2 side_tex_uv;
 
 	// --- THIS IS THE FINAL, CORRECTED BIOME LOGIC ---
-	// It now correctly checks for the dominant color channel.
-	
-	if (vertex_color.a > 0.5) { // Mountain is highest priority
+	// We now check for the specific "Mountain" color signature.
+	if (vertex_color.a > 0.5 && vertex_color.r < 0.1 && vertex_color.g < 0.1 && vertex_color.b < 0.1) { // Mountain (Black with Alpha)
 		side_tex_uv = mountain_rock_uv;
 		float snow_blend = smoothstep(50.0, 58.0, world_pos.y);
 		top_tex_uv = mix(mountain_rock_uv, snow_uv, snow_blend);
