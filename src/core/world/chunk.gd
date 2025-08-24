@@ -1,17 +1,15 @@
 # res://src/core/world/chunk.gd
 extends Node3D
 
-# --- NEW: Added MOUNTAIN to the Biome enum ---
-enum Biome { TUNDRA, PLAINS, DESERT, MOUNTAIN }
+var world # This is the new line
+var biome
 
 const CHUNK_WIDTH = 32
 const CHUNK_HEIGHT = 64
 const CHUNK_DEPTH = 32
 const SEA_LEVEL = 28
 const ISO_LEVEL = 0.5
-# --- NEW: Define the height where mountains start ---
 const MOUNTAIN_LEVEL = 45
-
 var chunk_position = Vector2i(0, 0)
 var noise: FastNoiseLite
 var temperature_noise: FastNoiseLite
@@ -32,49 +30,63 @@ func _ready():
 	add_child(static_body)
 	static_body.add_child(collision_shape)
 
-func generate_initial_data():
-	voxel_data.resize(CHUNK_WIDTH)
-	biome_data.resize(CHUNK_WIDTH)
-	for x in range(CHUNK_WIDTH):
-		voxel_data[x] = []
-		voxel_data[x].resize(CHUNK_HEIGHT)
-		biome_data[x] = []
-		biome_data[x].resize(CHUNK_DEPTH)
-		for y in range(CHUNK_HEIGHT):
-			voxel_data[x][y] = []
-			voxel_data[x][y].resize(CHUNK_DEPTH)
+func generate_initial_data(p_biome):
+	self.biome = p_biome
+	voxel_data.resize(32); for x in range(32):
+		voxel_data[x] = []; voxel_data[x].resize(64)
+		for y in range(64): voxel_data[x][y] = []; voxel_data[x][y].resize(32)
+
+	for x in range(32):
+		for z in range(32):
+			var world_x = chunk_position.x * 32 + x
+			var world_z = chunk_position.y * 32 + z
+			var noise_val = noise.get_noise_2d(world_x, world_z)
+			var ground_height = (noise_val * 10) + 32.0
+
+			if biome == world.Biome.MOUNTAINS:
+				ground_height += 20
+
+			for y in range(64):
+				var density = ground_height - y
+				if ground_height < 28 and y <= 28: density = float(28 - y)
+				voxel_data[x][y][z] = density
+
+			if biome == world.Biome.FOREST:
+				if noise.get_noise_2d(world_x, world_z) > 0.8: # Add trees randomly
+					var tree_height = 5 + randi() % 5
+					for i in range(tree_height):
+						voxel_data[x][ground_height + i][z] = 1.0 # Tree trunk
 
 	for x in range(CHUNK_WIDTH):
+		biome_data.append([])
 		for z in range(CHUNK_DEPTH):
+			biome_data[x].append(0)
 			var world_x = x + chunk_position.x * CHUNK_WIDTH
 			var world_z = z + chunk_position.y * CHUNK_DEPTH
-			
+
 			var temp = temperature_noise.get_noise_2d(world_x, world_z)
 			var moisture = moisture_noise.get_noise_2d(world_x, world_z)
 			var noise_val = noise.get_noise_2d(world_x, world_z)
 			var ground_height = (noise_val * 10) + (CHUNK_HEIGHT / 2.0)
-			
-			# --- NEW: Pass ground_height to the biome function ---
+
 			biome_data[x][z] = get_biome(temp, moisture, ground_height)
-			
+
 			for y in range(CHUNK_HEIGHT):
 				var density = ground_height - y
 				if ground_height < SEA_LEVEL and y <= SEA_LEVEL:
 					density = float(SEA_LEVEL - y)
 				voxel_data[x][y][z] = density
 
-# --- NEW: This function now considers height ---
-func get_biome(temp: float, moisture: float, height: float) -> Biome:
+func get_biome(temp: float, moisture: float, height: float):
 	if height > MOUNTAIN_LEVEL:
-		return Biome.MOUNTAIN
-	
-	# We make Tundra and Desert require more extreme values, making Plains more common.
+		return world.Biome.MOUNTAINS
+
 	if temp < -0.5:
-		return Biome.TUNDRA
+		return world.Biome.TUNDRA
 	elif temp > 0.6 and moisture < -0.4:
-		return Biome.DESERT
+		return world.Biome.DESERT
 	else:
-		return Biome.PLAINS
+		return world.Biome.PLAINS
 
 func edit_density_data(local_pos: Vector3, amount: float):
 	var radius = 3
@@ -97,18 +109,16 @@ func generate_mesh(padded_voxel_data):
 		for y in range(CHUNK_HEIGHT):
 			for z in range(CHUNK_DEPTH):
 				var biome = biome_data[x][z]
-				# --- NEW: Set a new vertex color for mountains ---
-				# We'll use the Alpha channel (A) for this.
 				match biome:
-					Biome.TUNDRA:
+					world.Biome.TUNDRA:
 						st.set_color(Color(1.0, 0.0, 0.0)) # R
-					Biome.PLAINS:
+					world.Biome.PLAINS:
 						st.set_color(Color(0.0, 1.0, 0.0)) # G
-					Biome.DESERT:
+					world.Biome.DESERT:
 						st.set_color(Color(0.0, 0.0, 1.0)) # B
-					Biome.MOUNTAIN:
+					world.Biome.MOUNTAINS:
 						st.set_color(Color(0.0, 0.0, 0.0, 1.0)) # A
-				
+
 				var cube_corners = [
 					padded_voxel_data[x][y][z+1], padded_voxel_data[x+1][y][z+1],
 					padded_voxel_data[x+1][y][z], padded_voxel_data[x][y][z],

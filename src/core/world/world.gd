@@ -8,7 +8,7 @@ const VIEW_DISTANCE = 3
 
 const WORLD_WIDTH_IN_CHUNKS = 32
 const WORLD_CIRCUMFERENCE_IN_VOXELS = WORLD_WIDTH_IN_CHUNKS * 32
-
+enum Biome { PLAINS, FOREST, DESERT, MOUNTAINS, JUNGLE, TUNDRA, SWAMP, OCEAN }
 var noise = FastNoiseLite.new()
 var temperature_noise = FastNoiseLite.new()
 var moisture_noise = FastNoiseLite.new()
@@ -28,7 +28,7 @@ func _ready():
 	temperature_noise.noise_type = FastNoiseLite.TYPE_PERLIN
 	temperature_noise.seed = randi()
 	# --- THIS VALUE HAS BEEN INCREASED FOR MORE VARIETY ---
-	temperature_noise.frequency = 0.009 
+	temperature_noise.frequency = 0.009
 
 	moisture_noise.noise_type = FastNoiseLite.TYPE_PERLIN; moisture_noise.seed = randi(); moisture_noise.frequency = 0.008
 	create_biome_texture()
@@ -71,11 +71,16 @@ func update_chunks():
 func load_chunk(chunk_pos: Vector2i):
 	if loaded_chunks.has(chunk_pos): return
 	var chunk = ChunkScene.instantiate()
-	chunk.chunk_position = chunk_pos; chunk.noise = noise; chunk.temperature_noise = temperature_noise
-	chunk.moisture_noise = moisture_noise; chunk.world_material = world_material
+	chunk.world = self
+	chunk.chunk_position = chunk_pos;
+	chunk.noise = noise;
+	chunk.temperature_noise = temperature_noise
+	chunk.moisture_noise = moisture_noise;
+	chunk.world_material = world_material
 	chunk.position = Vector3(chunk_pos.x * 32.0, 0, chunk_pos.y * 32.0)
-	add_child(chunk); loaded_chunks[chunk_pos] = chunk
-	chunk.generate_initial_data()
+	add_child(chunk);
+	loaded_chunks[chunk_pos] = chunk
+	chunk.generate_initial_data(get_biome(chunk_pos.x * 32, chunk_pos.y * 32))
 	update_chunk_and_neighbors(chunk_pos)
 
 func unload_chunk(chunk_pos: Vector2i):
@@ -136,10 +141,16 @@ func get_voxel_density(world_x, world_y, world_z):
 		if local_x >= 0 and local_x < 32 and world_y >= 0 and world_y < 64 and local_z >= 0 and local_z < 32:
 			return chunk.voxel_data[local_x][world_y][local_z]
 
+	var biome = get_biome(wrapped_world_x, world_z)
 	var noise_val = noise.get_noise_2d(wrapped_world_x, world_z)
 	var ground_height = (noise_val * 10) + 32.0
+
+	match biome:
+		Biome.MOUNTAINS:
+			ground_height += 20 # Make mountains taller
+
 	var density = ground_height - world_y
-	if ground_height < 28 and world_y <= 28: density = float(28 - world_y)
+	if ground_height < 28 and world_y <= 28: density = float(28 - world_y) # FIX: Was 'y', now 'world_y'
 	return density
 
 func create_biome_texture():
@@ -157,3 +168,24 @@ func get_surface_height(world_x, world_z):
 	var surface_y = ground_height - 0.5
 	if surface_y < 28.0: return 28.0
 	else: return surface_y
+	
+func get_biome(world_x, world_z):
+	var wrapped_world_x = wrapi(world_x, 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
+	var temp = temperature_noise.get_noise_2d(wrapped_world_x, world_z)
+	var moist = moisture_noise.get_noise_2d(wrapped_world_x, world_z)
+
+	if temp > 0.5:
+		if moist > 0.5:
+			return Biome.JUNGLE
+		else:
+			return Biome.DESERT
+	elif temp < -0.5:
+		if moist > 0.5:
+			return Biome.SWAMP
+		else:
+			return Biome.TUNDRA
+	else:
+		if moist > 0.5:
+			return Biome.FOREST
+		else:
+			return Biome.PLAINS

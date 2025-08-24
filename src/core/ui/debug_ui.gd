@@ -44,7 +44,8 @@ func _process(_delta):
 		
 		if chunk.biome_data.size() > local_x and chunk.biome_data[local_x].size() > local_z:
 			var biome_enum = chunk.biome_data[local_x][local_z]
-			var biome_name = chunk.Biome.keys()[biome_enum]
+			# --- FIX: Access Biome through the 'world' reference ---
+			var biome_name = world.Biome.keys()[biome_enum]
 			biome_label.text = "Biome: " + biome_name
 		else:
 			biome_label.text = "Biome: Loading..."
