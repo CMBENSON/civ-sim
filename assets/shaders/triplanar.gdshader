@@ -27,22 +27,31 @@ void fragment() {
 	vec2 top_tex_uv;
 	vec2 side_tex_uv;
 
-	// --- THIS IS THE FINAL, CORRECTED BIOME LOGIC ---
-	// We now check for the specific "Mountain" color signature.
-	if (vertex_color.a > 0.5 && vertex_color.r < 0.1 && vertex_color.g < 0.1 && vertex_color.b < 0.1) { // Mountain (Black with Alpha)
+	// --- THIS IS THE FINAL, ROBUST BIOME SELECTION LOGIC ---
+	// It checks which color channel has the highest value to determine the dominant biome.
+	float r = vertex_color.r;
+	float g = vertex_color.g;
+	float b = vertex_color.b;
+	float a = vertex_color.a;
+
+	if (a > 0.5 && r < 0.1 && g < 0.1 && b < 0.1) { // Mountain (Black with Alpha)
 		side_tex_uv = mountain_rock_uv;
 		float snow_blend = smoothstep(50.0, 58.0, world_pos.y);
 		top_tex_uv = mix(mountain_rock_uv, snow_uv, snow_blend);
 	
-	} else if (vertex_color.r > 0.5) { // Tundra (Red channel)
+	} else if (g >= r && g >= b) { // Plains (Green is dominant or tied)
+		top_tex_uv = grass_uv;
+		side_tex_uv = dirt_uv;
+
+	} else if (r > g && r > b) { // Tundra (Red is dominant)
 		top_tex_uv = snow_uv;
 		side_tex_uv = tundra_rock_uv;
 	
-	} else if (vertex_color.b > 0.5) { // Desert (Blue channel)
+	} else if (b > r && b > g) { // Desert (Blue is dominant)
 		top_tex_uv = sand_uv;
 		side_tex_uv = desert_rock_uv;
 
-	} else { // Default to Plains (Green channel is dominant)
+	} else { // Fallback case, default to Plains
 		top_tex_uv = grass_uv;
 		side_tex_uv = dirt_uv;
 	}
