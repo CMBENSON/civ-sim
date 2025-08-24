@@ -299,22 +299,24 @@ func edit_terrain(world_point: Vector3, amount: float) -> void:
 	chunk.edit_density_data(Vector3(local_x, local_y, local_z), amount, affected_chunks)
 
 	# Force regeneration of affected chunks by clearing their generation state
+	# In world.gd edit_terrain(), replace the queue management with:
 	for pos in affected_chunks.keys():
 		if loaded_chunks.has(pos):
-			print("World: Force regenerating chunk ", pos)
+			# Force immediate regeneration
+			if chunks_being_generated.has(pos):
+				# Wait for current generation to finish
+				continue
 			
-			# Clear any existing generation state
-			chunks_being_generated.erase(pos)
-			# Remove from queue if already there
+			# Clear from queue and regenerate
 			generation_queue.erase(pos)
 			
-			# Force immediate regeneration by adding to front of queue
-			generation_queue.push_front(pos)
-			print("World: Force queued chunk ", pos, " for re-meshing")
-			
-			# Debug: Show current queue state
-			print("World: Generation queue after edit: ", generation_queue)
-			print("World: Chunks being generated: ", chunks_being_generated.keys())
+			# Create new mesher and start immediately if thread available
+			for i in range(threads.size()):
+				if not threads[i].is_started():
+					chunks_being_generated[pos] = true
+					var mesher = VoxelMesher.new(pos, generator, tri_table_copy, edge_table_copy)
+					threads[i].start(Callable(self, "_thread_function").bind(mesher, threads[i], pos))
+					break
 
 	print("World: Terrain edit complete. Affected chunks: ", affected_chunks.keys())
 

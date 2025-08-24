@@ -7,7 +7,7 @@ var world_circumference_voxels: int
 var chunk_size: int
 var chunk_height: int = 64
 var preview_mode: bool = false  # Performance toggle for preview
-var verbose_logging: bool = false  # Debug output toggle
+var verbose_logging: bool = false  # Debug output toggle - OFF by default
 
 # Noise generators
 var continent_noise: FastNoiseLite
