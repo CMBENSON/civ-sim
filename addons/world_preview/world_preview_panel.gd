@@ -10,7 +10,7 @@ const WorldScene = preload("res://src/core/world/world.tscn")
 @onready var verbose_toggle      = $VBoxContainer/VerboseToggle
 
 # The SubViewport we render the 3D world into
-@onready var sub_viewport        : SubViewport = SubViewport.new()
+@onready var sub_viewport : SubViewport = SubViewport.new()
 
 var preview_world : Node3D
 var preview_camera : Camera3D
@@ -34,7 +34,6 @@ func _ready() -> void:
 	stop_button.text = "Stop"
 	stop_button.visible = false
 	stop_button.pressed.connect(_on_stop_pressed)
-	# Insert stop button after the generate button in the VBoxContainer
 	$VBoxContainer.add_child(stop_button)
 
 	# Insert the SubViewport into the viewport container
@@ -72,6 +71,9 @@ func _process(_delta: float) -> void:
 				_generate_biome_map_from_chunks()
 
 func _on_generate_pressed() -> void:
+	# Randomize the global random seed so WorldGenerator uses different seeds each time.
+	randomize()
+
 	generate_button.disabled = true
 	stop_button.visible      = true
 	biome_map_generated      = false
