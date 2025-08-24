@@ -1,4 +1,4 @@
-# res://src/core/world/world.gd
+@tool
 extends Node3D
 
 signal initial_chunks_generated
@@ -22,12 +22,12 @@ var is_first_update = true
 
 var generation_queue = []
 
+
 func _ready():
 	noise.noise_type = FastNoiseLite.TYPE_PERLIN; noise.seed = randi(); noise.frequency = 0.03
 	
-	temperature_noise.noise_type = FastNoiseLite.TYPE_PERLIN
-	temperature_noise.seed = randi()
-	# --- THIS VALUE HAS BEEN INCREASED FOR MORE VARIETY ---
+	temperature_noise.noise_type = FastNoiseLite.TYPE_PERLIN;
+	temperature_noise.seed = randi();
 	temperature_noise.frequency = 0.009
 
 	moisture_noise.noise_type = FastNoiseLite.TYPE_PERLIN; moisture_noise.seed = randi(); moisture_noise.frequency = 0.008
@@ -77,10 +77,12 @@ func load_chunk(chunk_pos: Vector2i):
 	chunk.temperature_noise = temperature_noise
 	chunk.moisture_noise = moisture_noise;
 	chunk.world_material = world_material
-	chunk.position = Vector3(chunk_pos.x * 32.0, 0, chunk_pos.y * 32.0)
+	chunk.position = Vector3(float(chunk_pos.x * 32), 0, float(chunk_pos.y * 32))
 	add_child(chunk);
 	loaded_chunks[chunk_pos] = chunk
-	chunk.generate_initial_data(get_biome(chunk_pos.x * 32, chunk_pos.y * 32))
+	
+	chunk.generate_initial_data()
+	
 	update_chunk_and_neighbors(chunk_pos)
 
 func unload_chunk(chunk_pos: Vector2i):
@@ -139,7 +141,8 @@ func get_voxel_density(world_x, world_y, world_z):
 		var local_x = wrapped_world_x - chunk.chunk_position.x * 32
 		var local_z = world_z - chunk.chunk_position.y * 32
 		if local_x >= 0 and local_x < 32 and world_y >= 0 and world_y < 64 and local_z >= 0 and local_z < 32:
-			return chunk.voxel_data[local_x][world_y][local_z]
+			if chunk.voxel_data.size() > local_x and chunk.voxel_data[local_x].size() > world_y and chunk.voxel_data[local_x][world_y].size() > local_z:
+				return chunk.voxel_data[local_x][world_y][local_z]
 
 	var biome = get_biome(wrapped_world_x, world_z)
 	var noise_val = noise.get_noise_2d(wrapped_world_x, world_z)
@@ -147,10 +150,10 @@ func get_voxel_density(world_x, world_y, world_z):
 
 	match biome:
 		Biome.MOUNTAINS:
-			ground_height += 20 # Make mountains taller
+			ground_height += 20
 
 	var density = ground_height - world_y
-	if ground_height < 28 and world_y <= 28: density = float(28 - world_y) # FIX: Was 'y', now 'world_y'
+	if ground_height < 28 and world_y <= 28: density = float(28 - world_y)
 	return density
 
 func create_biome_texture():
@@ -163,12 +166,23 @@ func create_biome_texture():
 	world_material.set_shader_parameter("texture_atlas", texture)
 
 func get_surface_height(world_x, world_z):
-	var density = get_voxel_density(world_x, 32, world_z)
-	var ground_height = 32.0 + density
-	var surface_y = ground_height - 0.5
-	if surface_y < 28.0: return 28.0
-	else: return surface_y
+	var chunk_pos = Vector2i(floori(world_x / 32.0), floori(world_z / 32.0))
+	var chunk = loaded_chunks.get(chunk_pos)
+	if not is_instance_valid(chunk):
+		# Fallback to noise if chunk isn't loaded (shouldn't happen at spawn)
+		var noise_val = noise.get_noise_2d(world_x, world_z)
+		return (noise_val * 10) + 32.0
+
+	var local_x = wrapi(world_x, 0, 32)
+	var local_z = wrapi(world_z, 0, 32)
+
+	# Scan from top to bottom to find the first solid voxel
+	for y in range(chunk.CHUNK_HEIGHT - 1, 0, -1):
+		if chunk.voxel_data[local_x][y][local_z] > chunk.ISO_LEVEL:
+			return y
 	
+	return chunk.SEA_LEVEL # Default to sea level if no ground is found
+
 func get_biome(world_x, world_z):
 	var wrapped_world_x = wrapi(world_x, 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
 	var temp = temperature_noise.get_noise_2d(wrapped_world_x, world_z)

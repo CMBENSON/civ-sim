@@ -11,8 +11,12 @@ config_version=5
 [application]
 
 config/name="civ-sim"
-run/main_scene="uid://i0laf7bt1mhb"
+run/main_scene="uid://crthmlegp6vb3"
 config/features=PackedStringArray("4.4", "Forward Plus")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/world_preview/plugin.cfg")
 
 [input]
 

@@ -1,15 +1,14 @@
-# res://src/core/world/chunk.gd
+@tool
 extends Node3D
 
-var world # This is the new line
-var biome
+var world
 
 const CHUNK_WIDTH = 32
 const CHUNK_HEIGHT = 64
 const CHUNK_DEPTH = 32
 const SEA_LEVEL = 28
 const ISO_LEVEL = 0.5
-const MOUNTAIN_LEVEL = 45
+
 var chunk_position = Vector2i(0, 0)
 var noise: FastNoiseLite
 var temperature_noise: FastNoiseLite
@@ -30,63 +29,45 @@ func _ready():
 	add_child(static_body)
 	static_body.add_child(collision_shape)
 
-func generate_initial_data(p_biome):
-	self.biome = p_biome
-	voxel_data.resize(32); for x in range(32):
-		voxel_data[x] = []; voxel_data[x].resize(64)
-		for y in range(64): voxel_data[x][y] = []; voxel_data[x][y].resize(32)
-
-	for x in range(32):
-		for z in range(32):
-			var world_x = chunk_position.x * 32 + x
-			var world_z = chunk_position.y * 32 + z
-			var noise_val = noise.get_noise_2d(world_x, world_z)
-			var ground_height = (noise_val * 10) + 32.0
-
-			if biome == world.Biome.MOUNTAINS:
-				ground_height += 20
-
-			for y in range(64):
-				var density = ground_height - y
-				if ground_height < 28 and y <= 28: density = float(28 - y)
-				voxel_data[x][y][z] = density
-
-			if biome == world.Biome.FOREST:
-				if noise.get_noise_2d(world_x, world_z) > 0.8: # Add trees randomly
-					var tree_height = 5 + randi() % 5
-					for i in range(tree_height):
-						voxel_data[x][ground_height + i][z] = 1.0 # Tree trunk
+func generate_initial_data():
+	voxel_data.resize(CHUNK_WIDTH)
+	biome_data.resize(CHUNK_WIDTH)
+	for x in range(CHUNK_WIDTH):
+		voxel_data[x] = []
+		voxel_data[x].resize(CHUNK_HEIGHT)
+		biome_data[x] = []
+		biome_data[x].resize(CHUNK_DEPTH)
+		for y in range(CHUNK_HEIGHT):
+			voxel_data[x][y] = []
+			voxel_data[x][y].resize(CHUNK_DEPTH)
 
 	for x in range(CHUNK_WIDTH):
-		biome_data.append([])
 		for z in range(CHUNK_DEPTH):
-			biome_data[x].append(0)
-			var world_x = x + chunk_position.x * CHUNK_WIDTH
-			var world_z = z + chunk_position.y * CHUNK_DEPTH
+			var world_x = chunk_position.x * CHUNK_WIDTH + x
+			var world_z = chunk_position.y * CHUNK_DEPTH + z
+			
+			var current_biome = world.get_biome(world_x, world_z)
+			biome_data[x][z] = current_biome
 
-			var temp = temperature_noise.get_noise_2d(world_x, world_z)
-			var moisture = moisture_noise.get_noise_2d(world_x, world_z)
 			var noise_val = noise.get_noise_2d(world_x, world_z)
 			var ground_height = (noise_val * 10) + (CHUNK_HEIGHT / 2.0)
 
-			biome_data[x][z] = get_biome(temp, moisture, ground_height)
-
+			if current_biome == world.Biome.MOUNTAINS:
+				ground_height += 20
+			
 			for y in range(CHUNK_HEIGHT):
 				var density = ground_height - y
 				if ground_height < SEA_LEVEL and y <= SEA_LEVEL:
 					density = float(SEA_LEVEL - y)
 				voxel_data[x][y][z] = density
-
-func get_biome(temp: float, moisture: float, height: float):
-	if height > MOUNTAIN_LEVEL:
-		return world.Biome.MOUNTAINS
-
-	if temp < -0.5:
-		return world.Biome.TUNDRA
-	elif temp > 0.6 and moisture < -0.4:
-		return world.Biome.DESERT
-	else:
-		return world.Biome.PLAINS
+			
+			if current_biome == world.Biome.FOREST:
+				var tree_noise = noise.get_noise_2d(world_x + 1000, world_z + 1000)
+				if tree_noise > 0.7:
+					var tree_height = 4 + randi() % 4
+					for i in range(tree_height):
+						if ground_height + i < CHUNK_HEIGHT:
+							voxel_data[x][int(ground_height) + i][z] = 1.0
 
 func edit_density_data(local_pos: Vector3, amount: float):
 	var radius = 3
@@ -111,13 +92,15 @@ func generate_mesh(padded_voxel_data):
 				var biome = biome_data[x][z]
 				match biome:
 					world.Biome.TUNDRA:
-						st.set_color(Color(1.0, 0.0, 0.0)) # R
+						st.set_color(Color(1.0, 0.0, 0.0, 0.0)) # R
 					world.Biome.PLAINS:
-						st.set_color(Color(0.0, 1.0, 0.0)) # G
+						st.set_color(Color(0.0, 1.0, 0.0, 0.0)) # G
 					world.Biome.DESERT:
-						st.set_color(Color(0.0, 0.0, 1.0)) # B
+						st.set_color(Color(0.0, 0.0, 1.0, 0.0)) # B
 					world.Biome.MOUNTAINS:
 						st.set_color(Color(0.0, 0.0, 0.0, 1.0)) # A
+					_:
+						st.set_color(Color(0.0, 1.0, 0.0, 0.0))
 
 				var cube_corners = [
 					padded_voxel_data[x][y][z+1], padded_voxel_data[x+1][y][z+1],
@@ -127,14 +110,14 @@ func generate_mesh(padded_voxel_data):
 				]
 
 				var cube_index = 0
-				if cube_corners[0] > ISO_LEVEL: cube_index |= 1
-				if cube_corners[1] > ISO_LEVEL: cube_index |= 2
-				if cube_corners[2] > ISO_LEVEL: cube_index |= 4
-				if cube_corners[3] > ISO_LEVEL: cube_index |= 8
-				if cube_corners[4] > ISO_LEVEL: cube_index |= 16
-				if cube_corners[5] > ISO_LEVEL: cube_index |= 32
-				if cube_corners[6] > ISO_LEVEL: cube_index |= 64
-				if cube_corners[7] > ISO_LEVEL: cube_index |= 128
+				if cube_corners[0] < ISO_LEVEL: cube_index |= 1
+				if cube_corners[1] < ISO_LEVEL: cube_index |= 2
+				if cube_corners[2] < ISO_LEVEL: cube_index |= 4
+				if cube_corners[3] < ISO_LEVEL: cube_index |= 8
+				if cube_corners[4] < ISO_LEVEL: cube_index |= 16
+				if cube_corners[5] < ISO_LEVEL: cube_index |= 32
+				if cube_corners[6] < ISO_LEVEL: cube_index |= 64
+				if cube_corners[7] < ISO_LEVEL: cube_index |= 128
 
 				var edges = MarchingCubes.TRI_TABLE[cube_index]
 
@@ -143,46 +126,47 @@ func generate_mesh(padded_voxel_data):
 					
 					var v1_index = MarchingCubes.EDGE_TABLE[edges[i]][0]
 					var v2_index = MarchingCubes.EDGE_TABLE[edges[i]][1]
-					var v1 = get_vertex_pos(x, y, z, v1_index)
-					var v2 = get_vertex_pos(x, y, z, v2_index)
-					var vert1 = v1.lerp(v2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
+					var p1 = get_vertex_pos(x, y, z, v1_index)
+					var p2 = get_vertex_pos(x, y, z, v2_index)
+					var vert1 = p1.lerp(p2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
 
 					v1_index = MarchingCubes.EDGE_TABLE[edges[i+1]][0]
 					v2_index = MarchingCubes.EDGE_TABLE[edges[i+1]][1]
-					v1 = get_vertex_pos(x, y, z, v1_index)
-					v2 = get_vertex_pos(x, y, z, v2_index)
-					var vert2 = v1.lerp(v2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
+					p1 = get_vertex_pos(x, y, z, v1_index)
+					p2 = get_vertex_pos(x, y, z, v2_index)
+					var vert2 = p1.lerp(p2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
 
 					v1_index = MarchingCubes.EDGE_TABLE[edges[i+2]][0]
 					v2_index = MarchingCubes.EDGE_TABLE[edges[i+2]][1]
-					v1 = get_vertex_pos(x, y, z, v1_index)
-					v2 = get_vertex_pos(x, y, z, v2_index)
-					var vert3 = v1.lerp(v2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
+					p1 = get_vertex_pos(x, y, z, v1_index)
+					p2 = get_vertex_pos(x, y, z, v2_index)
+					var vert3 = p1.lerp(p2, (ISO_LEVEL - cube_corners[v1_index]) / (cube_corners[v2_index] - cube_corners[v1_index]))
 					
 					st.add_vertex(vert1); st.add_vertex(vert2); st.add_vertex(vert3)
 
 	st.generate_normals()
+	# --- PERFORMANCE FIX ---
+	# Commit the mesh ONCE.
 	var mesh = st.commit()
+	
+	# If the resulting mesh is empty, clear everything and stop.
+	if not mesh or mesh.get_surface_count() == 0:
+		mesh_instance.mesh = null
+		collision_shape.shape = null
+		return
+		
 	mesh_instance.mesh = mesh
 	mesh_instance.material_override = world_material
 	collision_shape.shape = mesh.create_trimesh_shape()
 
 func get_vertex_pos(x, y, z, index):
 	match index:
-		0:
-			return Vector3(x, y, z + 1)
-		1:
-			return Vector3(x + 1, y, z + 1)
-		2:
-			return Vector3(x + 1, y, z)
-		3:
-			return Vector3(x, y, z)
-		4:
-			return Vector3(x, y + 1, z + 1)
-		5:
-			return Vector3(x + 1, y + 1, z + 1)
-		6:
-			return Vector3(x + 1, y + 1, z)
-		7:
-			return Vector3(x, y + 1, z)
+		0: return Vector3(x, y, z + 1)
+		1: return Vector3(x + 1, y, z + 1)
+		2: return Vector3(x + 1, y, z)
+		3: return Vector3(x, y, z)
+		4: return Vector3(x, y + 1, z + 1)
+		5: return Vector3(x + 1, y + 1, z + 1)
+		6: return Vector3(x + 1, y + 1, z)
+		7: return Vector3(x, y + 1, z)
 	return Vector3.ZERO

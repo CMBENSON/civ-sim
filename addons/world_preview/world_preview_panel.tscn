@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3 uid="uid://ddsqn5tg65306"]
+
+[ext_resource type="Script" uid="uid://d2lga6a88368j" path="res://world_preview_panel.gd" id="1_08h3v"]
+
+[node name="PanelContainer" type="PanelContainer"]
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_08h3v")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Button" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+text = "Generate Preview"
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+stretch = true

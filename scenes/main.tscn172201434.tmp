@@ -1,7 +1,7 @@
 [gd_scene load_steps=9 format=3 uid="uid://crthmlegp6vb3"]
 
 [ext_resource type="Script" uid="uid://cr6q5kjlwt8vt" path="res://src/core/main.gd" id="1_jyhfs"]
-[ext_resource type="PackedScene" uid="uid://ch3d8q15s8u4v" path="res://src/core/world/world.tscn" id="2_jyhfs"]
+[ext_resource type="Script" uid="uid://bwc32p26ge41q" path="res://src/core/world/world.gd" id="2_tbgi4"]
 [ext_resource type="Script" uid="uid://bcrfkj466kcad" path="res://src/core/player/player.gd" id="3_tefeu"]
 [ext_resource type="PackedScene" uid="uid://dvdm5xneeelae" path="res://src/core/ui/debug_ui.tscn" id="4_o6xl0"]
 
@@ -34,7 +34,8 @@ environment = SubResource("Environment_31q0o")
 transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 10, 0)
 shadow_enabled = true
 
-[node name="World" parent="." instance=ExtResource("2_jyhfs")]
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("2_tbgi4")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
