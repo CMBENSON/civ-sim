@@ -1,11 +1,9 @@
-# res://src/core/player/player.gd
 extends CharacterBody3D
 
-const SPEED = 5.0
+const WALK_SPEED = 5.0
+const FLY_SPEED = 20.0 # A faster speed for flying
 const JUMP_VELOCITY = 4.5
 const MOUSE_SENSITIVITY = 0.002
-
-var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 @onready var head = $Head
 @onready var camera = $Head/Camera3D
@@ -35,19 +33,36 @@ func _unhandled_input(event):
 				world_node.edit_terrain(collision_point, -1.0)
 
 func _physics_process(delta):
-	if not is_on_floor():
-		velocity.y -= gravity * delta
+	# --- FLIGHT MODE CHANGES ---
+	# We no longer apply gravity.
+	# if not is_on_floor():
+	# 	velocity.y -= gravity * delta
 
-	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
-		velocity.y = JUMP_VELOCITY
+	# Get the current speed (sprint if Shift is held)
+	var current_speed = FLY_SPEED
+	if Input.is_key_pressed(KEY_SHIFT):
+		current_speed = FLY_SPEED * 3.0
 
+	# Get horizontal movement input
 	var input_dir = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction = (head.transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
+	
+	# Apply horizontal velocity
 	if direction:
-		velocity.x = direction.x * SPEED
-		velocity.z = direction.z * SPEED
+		velocity.x = direction.x * current_speed
+		velocity.z = direction.z * current_speed
 	else:
-		velocity.x = move_toward(velocity.x, 0, SPEED)
-		velocity.z = move_toward(velocity.z, 0, SPEED)
+		velocity.x = move_toward(velocity.x, 0, current_speed)
+		velocity.z = move_toward(velocity.z, 0, current_speed)
+
+	# Get vertical movement input
+	var vertical_movement = 0.0
+	if Input.is_action_pressed("ui_accept"): # Spacebar to go up
+		vertical_movement += current_speed
+	if Input.is_action_pressed("ui_page_down"): # Left Ctrl to go down
+		vertical_movement -= current_speed
+		
+	# Apply vertical velocity
+	velocity.y = vertical_movement
 
 	move_and_slide()

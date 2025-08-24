@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://ddsqn5tg65306"]
 
-[ext_resource type="Script" uid="uid://d2lga6a88368j" path="res://world_preview_panel.gd" id="1_08h3v"]
+[ext_resource type="Script" uid="uid://d2lga6a88368j" path="res://addons/world_preview/world_preview_panel.gd" id="1_08h3v"]
 
 [node name="PanelContainer" type="PanelContainer"]
 offset_right = 40.0

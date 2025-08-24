@@ -4,6 +4,7 @@ var chunk_position: Vector2i
 var noise: FastNoiseLite
 var temperature_noise: FastNoiseLite
 var moisture_noise: FastNoiseLite
+var elevation_noise: FastNoiseLite # Add this line
 var TRI_TABLE: Array
 var EDGE_TABLE: Array
 
@@ -17,11 +18,13 @@ var mesh_arrays: Array
 var biome_data: Array
 var voxel_data: Array
 
-func _init(p_chunk_pos, p_noise, p_temp_noise, p_moisture_noise, p_tri_table, p_edge_table):
+# --- FIX: Add the new elevation_noise parameter ---
+func _init(p_chunk_pos, p_noise, p_temp_noise, p_moisture_noise, p_elevation_noise, p_tri_table, p_edge_table):
 	self.chunk_position = p_chunk_pos
 	self.noise = p_noise
 	self.temperature_noise = p_temp_noise
 	self.moisture_noise = p_moisture_noise
+	self.elevation_noise = p_elevation_noise # Add this line
 	self.TRI_TABLE = p_tri_table
 	self.EDGE_TABLE = p_edge_table
 
@@ -165,8 +168,26 @@ func get_vertex_pos(x,y,z,index):
 	return Vector3.ZERO
 
 func _get_biome_at(world_x, world_z):
-	var temp=temperature_noise.get_noise_2d(world_x, world_z)
-	var moist=moisture_noise.get_noise_2d(world_x, world_z)
-	if temp > 0.5: return WorldData.Biome.DESERT if moist < 0.5 else WorldData.Biome.JUNGLE
-	elif temp < -0.5: return WorldData.Biome.TUNDRA if moist < 0.5 else WorldData.Biome.SWAMP
-	else: return WorldData.Biome.PLAINS if moist < 0.5 else WorldData.Biome.FOREST
+	var elev = elevation_noise.get_noise_2d(world_x, world_z)
+	
+	if elev < -0.1: # Values below this are deep ocean
+		return WorldData.Biome.OCEAN
+
+	var temp = temperature_noise.get_noise_2d(world_x, world_z)
+	var moist = moisture_noise.get_noise_2d(world_x, world_z)
+	var temp_norm = (temp + 1.0) / 2.0
+	var moist_norm = (moist + 1.0) / 2.0
+
+	if temp_norm < 0.2:
+		return WorldData.Biome.TUNDRA
+	elif temp_norm > 0.8:
+		if moist_norm < 0.3:
+			return WorldData.Biome.DESERT
+		else:
+			return WorldData.Biome.JUNGLE
+	elif moist_norm > 0.6:
+		return WorldData.Biome.FOREST
+	elif moist_norm < 0.2:
+		return WorldData.Biome.SWAMP
+	else:
+		return WorldData.Biome.PLAINS

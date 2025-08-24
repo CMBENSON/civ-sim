@@ -11,10 +11,14 @@ const VIEW_DISTANCE = 3
 const WORLD_WIDTH_IN_CHUNKS = 32
 const WORLD_CIRCUMFERENCE_IN_VOXELS = WORLD_WIDTH_IN_CHUNKS * 32
 
+# --- FIX: Re-introducing the is_preview flag ---
+var is_preview = false
+
 var noise = FastNoiseLite.new()
 var temperature_noise = FastNoiseLite.new()
 var moisture_noise = FastNoiseLite.new()
-var world_material = load("res://assets/materials/world_shader_material.tres")
+var elevation_noise = FastNoiseLite.new()
+var world_material = ShaderMaterial.new()
 
 var player: CharacterBody3D
 var loaded_chunks = {}
@@ -30,9 +34,14 @@ var tri_table_copy: Array
 var edge_table_copy: Array
 
 func _ready():
+	var triplanar_shader = load("res://assets/shaders/triplanar.gdshader")
+	world_material.shader = triplanar_shader
+
 	noise.noise_type = FastNoiseLite.TYPE_PERLIN; noise.seed = randi(); noise.frequency = 0.03
 	temperature_noise.noise_type = FastNoiseLite.TYPE_PERLIN; temperature_noise.seed = randi(); temperature_noise.frequency = 0.009
 	moisture_noise.noise_type = FastNoiseLite.TYPE_PERLIN; moisture_noise.seed = randi(); moisture_noise.frequency = 0.008
+	elevation_noise.noise_type = FastNoiseLite.TYPE_PERLIN; elevation_noise.seed = randi(); elevation_noise.frequency = 0.002
+	
 	create_biome_texture()
 	
 	tri_table_copy = MarchingCubesData.TRI_TABLE.duplicate(true)
@@ -43,7 +52,8 @@ func _ready():
 		threads.append(thread)
 
 func _process(_delta):
-	if Engine.is_editor_hint():
+	# --- FIX: The guard now correctly checks the is_preview flag ---
+	if Engine.is_editor_hint() and not is_preview:
 		return
 
 	if not results_queue.is_empty():
@@ -58,14 +68,13 @@ func _process(_delta):
 		for i in range(threads.size()):
 			if not threads[i].is_started() and not generation_queue.is_empty():
 				var chunk_pos = generation_queue.pop_front()
-				var mesher = VoxelMesher.new(chunk_pos, noise, temperature_noise, moisture_noise, tri_table_copy, edge_table_copy)
+				var mesher = VoxelMesher.new(chunk_pos, noise, temperature_noise, moisture_noise, elevation_noise, tri_table_copy, edge_table_copy)
 				threads[i].start(Callable(self, "_thread_function").bind(mesher, threads[i]))
 
 	if not is_instance_valid(player): return
 	
 	var player_pos = player.global_position
-	var wrapped_player_x = wrapi(floor(player_pos.x), 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
-	var new_player_chunk_x = floor(wrapped_player_x / 32.0)
+	var new_player_chunk_x = floor(player_pos.x / 32.0)
 	var new_player_chunk_z = floor(player_pos.z / 32.0)
 	var new_player_chunk = Vector2i(new_player_chunk_x, new_player_chunk_z)
 	
@@ -144,13 +153,16 @@ func get_surface_height(world_x, world_z):
 	
 	return chunk.SEA_LEVEL
 
-# --- FIX: Improved biome logic for more variety ---
 func get_biome(world_x, world_z):
-	var wrapped_world_x = wrapi(world_x, 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
-	var temp = temperature_noise.get_noise_2d(wrapped_world_x, world_z)
-	var moist = moisture_noise.get_noise_2d(wrapped_world_x, world_z)
+	var elev = elevation_noise.get_noise_2d(world_x, world_z)
+	if elev < -0.1: return WorldData.Biome.OCEAN
+	return WorldData.Biome.PLAINS # Default for any non-mesher queries
 
-	# Normalize noise from [-1, 1] to [0, 1] for easier thresholds
+
+	# If we are on land, use temperature and moisture to determine the biome
+	var temp = temperature_noise.get_noise_2d(world_x, world_z)
+	var moist = moisture_noise.get_noise_2d(world_x, world_z)
+
 	var temp_norm = (temp + 1.0) / 2.0
 	var moist_norm = (moist + 1.0) / 2.0
 
@@ -164,11 +176,11 @@ func get_biome(world_x, world_z):
 	elif moist_norm > 0.6:
 		return WorldData.Biome.FOREST
 	elif moist_norm < 0.2:
-		return WorldData.Biome.SWAMP # Swamps can be cool or warm
+		return WorldData.Biome.SWAMP
 	else:
 		return WorldData.Biome.PLAINS
 
-# --- FIX: Re-implement terrain editing ---
+# --- FIX: Corrected terrain editing call ---
 func edit_terrain(world_pos: Vector3, amount: float):
 	var wrapped_x = wrapi(floor(world_pos.x), 0, WORLD_CIRCUMFERENCE_IN_VOXELS)
 	var chunk_pos_x = floor(wrapped_x / 32.0)
@@ -177,6 +189,7 @@ func edit_terrain(world_pos: Vector3, amount: float):
 
 	if loaded_chunks.has(chunk_pos):
 		var chunk = loaded_chunks[chunk_pos]
+		# Calculate the position relative to the chunk's origin
 		var local_pos = world_pos - chunk.global_position
 		
 		# We tell the chunk to edit its data. It will handle the remeshing.

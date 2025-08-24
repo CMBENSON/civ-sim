@@ -18,6 +18,8 @@ func _ready():
 	viewport_container.add_child(sub_viewport)
 	
 	preview_camera = Camera3D.new()
+	# --- FIX: Set the 'near' clip plane to a small value ---
+	preview_camera.near = 0.1
 	sub_viewport.add_child(preview_camera)
 	
 	var map_center = (32 * 32) / 2.0
@@ -25,14 +27,14 @@ func _ready():
 	preview_camera.look_at(Vector3(map_center, 0, map_center))
 
 func _process(_delta):
-	# This function will now just update the progress bar based on the world's state.
-	if is_instance_valid(preview_world) and not preview_world.generation_queue.is_empty():
+	if is_instance_valid(preview_world):
 		var total_chunks = preview_world.WORLD_WIDTH_IN_CHUNKS * preview_world.WORLD_WIDTH_IN_CHUNKS
-		progress_bar.max_value = total_chunks
-		# Progress is the number of chunks that are no longer in the queue
-		progress_bar.value = total_chunks - preview_world.generation_queue.size()
+		var generated_chunks = preview_world.loaded_chunks.size()
 		
-		if preview_world.generation_queue.is_empty():
+		progress_bar.max_value = total_chunks
+		progress_bar.value = generated_chunks
+		
+		if generated_chunks == total_chunks and generate_button.disabled:
 			generate_button.disabled = false
 			progress_bar.value = progress_bar.max_value
 
@@ -43,11 +45,10 @@ func _on_generate_pressed():
 		preview_world.queue_free()
 
 	preview_world = WorldScene.instantiate()
+	# --- FIX: Set the flag to allow processing in the editor ---
+	preview_world.is_preview = true
 	sub_viewport.add_child(preview_world)
 	
-	# --- NEW LOGIC ---
-	# We no longer generate the mesh here. We just tell the world to load everything.
-	# The world's own _process loop will handle the multithreaded generation.
 	var world_width_in_chunks = preview_world.WORLD_WIDTH_IN_CHUNKS
 	for x in range(world_width_in_chunks):
 		for z in range(world_width_in_chunks):
