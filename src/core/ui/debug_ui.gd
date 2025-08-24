@@ -34,9 +34,10 @@ func _process(_delta):
 	var chunk = world.loaded_chunks.get(current_chunk_pos)
 	
 	if is_instance_valid(chunk) and not chunk.biome_data.is_empty():
-		var local_x = int(wrapped_world_x) % 32
-		var local_z = int(world_z) % 32
-		if local_z < 0: local_z += 32
+		var c_size = world.CHUNK_SIZE
+		var local_x = int(wrapped_world_x) % c_size
+		var local_z = int(world_z) % c_size
+		if local_z < 0: local_z += c_size
 		
 		if chunk.biome_data.size() > local_x and chunk.biome_data[local_x].size() > local_z:
 			var biome_enum = chunk.biome_data[local_x][local_z]

@@ -6,9 +6,9 @@ var sea_level: float = 28.0
 var world_circumference_voxels: int
 var chunk_size: int
 var pole_influence: float = 0.6          # 0..1, stronger = colder poles
-var continent_threshold: float = -0.05   # lower = more ocean, higher = more land
-var mountain_boost: float = 22.0         # extra height for mountainous regions
-var base_variation: float = 10.0         # local elevation variation (hills)
+@export var base_variation := 20.0
+@export var mountain_boost := 45.0
+@export var continent_threshold := 0.0
 var pole_sink: float = 0.0               # optionally lower land near poles
 
 # Noises (created in _init)
@@ -18,6 +18,8 @@ var n_elev_detail: FastNoiseLite
 var n_temp: FastNoiseLite
 var n_moist: FastNoiseLite
 
+
+
 func _init(p_world_circumference_voxels: int, p_chunk_size: int) -> void:
 		world_circumference_voxels = p_world_circumference_voxels
 		chunk_size = p_chunk_size
@@ -26,7 +28,9 @@ func _init(p_world_circumference_voxels: int, p_chunk_size: int) -> void:
 		n_continent = FastNoiseLite.new()
 		n_continent.noise_type = FastNoiseLite.TYPE_PERLIN
 		n_continent.seed = randi()
-		n_continent.frequency = 1.0 / float(world_circumference_voxels)   # wraps smoothly
+		n_continent.frequency = 1.0  # one cycle across [0,1]
+		
+
 
 		# Mid‑scale elevation (regional variation)
 		n_elev_mid = FastNoiseLite.new()
@@ -60,7 +64,7 @@ func _wrap_x(x: float) -> float:
 func get_continent_value(world_x: float, world_z: float) -> float:
 		# Sample continent noise with normalized wrapped X, Z (Z not wrapped)
 		var nx = _wrap_x(world_x) / float(world_circumference_voxels)
-		var nz = world_z / float(world_circumference_voxels) # scale similar to X
+		var nz = world_z / float(world_circumference_voxels)
 		return n_continent.get_noise_2d(nx, nz)  # [-1, 1]
 
 func is_ocean(world_x: float, world_z: float) -> bool:
