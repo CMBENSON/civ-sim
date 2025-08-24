@@ -5,9 +5,23 @@ extends Control
 @onready var pos_label = $MarginContainer/VBoxContainer/PosLabel
 @onready var chunk_label = $MarginContainer/VBoxContainer/ChunkLabel
 @onready var biome_label = $MarginContainer/VBoxContainer/BiomeLabel
+@onready var height_label = $MarginContainer/VBoxContainer/HeightLabel
+@onready var climate_label = $MarginContainer/VBoxContainer/ClimateLabel
 
 var player: CharacterBody3D
 var world: Node3D
+
+func _ready():
+	# Create labels if they don't exist
+	if not height_label:
+		height_label = Label.new()
+		height_label.name = "HeightLabel"
+		$MarginContainer/VBoxContainer.add_child(height_label)
+	
+	if not climate_label:
+		climate_label = Label.new()
+		climate_label.name = "ClimateLabel"
+		$MarginContainer/VBoxContainer.add_child(climate_label)
 
 func _process(_delta):
 	fps_label.text = "FPS: " + str(Engine.get_frames_per_second())
@@ -43,7 +57,17 @@ func _process(_delta):
 			var biome_enum = chunk.biome_data[local_x][local_z]
 			var biome_name = WorldData.Biome.keys()[biome_enum]
 			biome_label.text = "Biome: " + biome_name
+			
+			# Get detailed terrain info
+			if world.generator and world.generator.has_method("get_debug_info"):
+				var debug_info = world.generator.get_debug_info(world_x, world_z)
+				height_label.text = "Height: %.1f (Sea: %.1f)" % [debug_info.height, debug_info.sea_level]
+				climate_label.text = "Temp: %.2f, Moist: %.2f" % [debug_info.temperature, debug_info.moisture]
 		else:
 			biome_label.text = "Biome: Loading..."
+			height_label.text = "Height: Loading..."
+			climate_label.text = "Climate: Loading..."
 	else:
 		biome_label.text = "Biome: Loading..."
+		height_label.text = "Height: Loading..."
+		climate_label.text = "Climate: Loading..."

@@ -14,6 +14,10 @@ layout_mode = 2
 layout_mode = 2
 text = "Generate Full Preview"
 
+[node name="VerboseToggle" type="CheckBox" parent="VBoxContainer"]
+layout_mode = 2
+text = "Verbose Logging (Debug Output)"
+
 [node name="SubViewportContainer" type="SubViewportContainer" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3

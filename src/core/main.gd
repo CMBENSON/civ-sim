@@ -19,12 +19,20 @@ func _ready():
 
 
 func on_world_ready():
-	# --- THIS IS THE FIX ---
-	# Instead of waiting for a process_frame, we wait for two physics_frames.
-	# This gives the physics server ample time to register the newly created
-	# collision shape for the spawn chunk before we place the player in the world.
+	# Wait for physics to be ready
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	
-	var spawn_y = world.get_surface_height(0, 0)
-	player.global_position = Vector3(0, spawn_y + 2, 0)
+	# Get a safe spawn position above the terrain
+	var spawn_x = 0.0
+	var spawn_z = 0.0
+	var spawn_y = world.get_surface_height(spawn_x, spawn_z)
+	
+	# Ensure we're well above the surface to avoid collision issues
+	spawn_y += 5.0  # Add 5 units above surface
+	
+	# Set player position
+	player.global_position = Vector3(spawn_x, spawn_y, spawn_z)
+	
+	print("Player spawned at: ", player.global_position)
+	print("Surface height at spawn: ", world.get_surface_height(spawn_x, spawn_z))

@@ -7,11 +7,11 @@ var world
 var voxel_data = []
 var biome_data = []
 
-const CHUNK_WIDTH = 32
-const CHUNK_HEIGHT = 64
-const CHUNK_DEPTH = 32
+const CHUNK_WIDTH = 16
+const CHUNK_HEIGHT = 256
+const CHUNK_DEPTH = 16
 const SEA_LEVEL = 28
-const ISO_LEVEL = 0.5
+const ISO_LEVEL = 0.0  # Match VoxelMesher.gd
 
 var chunk_position = Vector2i(0, 0)
 var world_material: Material
@@ -29,30 +29,56 @@ func _ready():
 		static_body.add_child(collision_shape)
 
 func apply_mesh_data(p_voxel_data: Array, p_mesh_arrays: Array, p_biome_data: Array):
+		# Only print for first few chunks to avoid spam
+		if chunk_position == Vector2i.ZERO or chunk_position == Vector2i(1, 0) or chunk_position == Vector2i(0, 1):
+			print("Chunk ", chunk_position, ": Applying mesh data")
+			print("  Voxel data size: ", p_voxel_data.size())
+			print("  Mesh arrays size: ", p_mesh_arrays.size())
+			print("  Biome data size: ", p_biome_data.size())
+		
 		self.voxel_data = p_voxel_data
 		self.biome_data = p_biome_data
 		is_generating = false
 
 		if p_mesh_arrays.is_empty() or p_mesh_arrays[Mesh.ARRAY_VERTEX].is_empty():
+			if chunk_position == Vector2i.ZERO or chunk_position == Vector2i(1, 0) or chunk_position == Vector2i(0, 1):
+				print("Chunk ", chunk_position, ": No mesh data, clearing mesh")
 			mesh_instance.mesh = null
 			collision_shape.shape = null
 			return
 
+		if chunk_position == Vector2i.ZERO or chunk_position == Vector2i(1, 0) or chunk_position == Vector2i(0, 1):
+			print("Chunk ", chunk_position, ": Creating mesh with ", p_mesh_arrays[Mesh.ARRAY_VERTEX].size(), " vertices")
+		
 		var mesh = ArrayMesh.new()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, p_mesh_arrays)
 
 		mesh_instance.mesh = mesh
 		mesh_instance.material_override = world_material
+		
+		# Debug material assignment
+		if chunk_position == Vector2i.ZERO or chunk_position == Vector2i(1, 0) or chunk_position == Vector2i(0, 1):
+			print("Chunk ", chunk_position, ": Material assigned: ", world_material)
+			print("Chunk ", chunk_position, ": Material shader: ", world_material.shader if world_material else "null")
+			print("Chunk ", chunk_position, ": Mesh instance material: ", mesh_instance.material_override)
 
 		# Create collision shape
 		collision_shape.shape = mesh.create_trimesh_shape()
+		
+		if chunk_position == Vector2i.ZERO or chunk_position == Vector2i(1, 0) or chunk_position == Vector2i(0, 1):
+			print("Chunk ", chunk_position, ": Mesh applied successfully")
+			print("Chunk ", chunk_position, ": Final mesh instance: ", mesh_instance)
+			print("Chunk ", chunk_position, ": Final material: ", mesh_instance.material_override)
 
 func edit_density_data(local_pos: Vector3, amount: float, affected_chunks: Dictionary):
 		if voxel_data.is_empty():
-				return
+			print("Chunk ", chunk_position, ": Cannot edit - no voxel data")
+			return
 
 		var radius = 3
 		var changes_made = false
+		print("Chunk ", chunk_position, ": Editing terrain at local pos ", local_pos, " with amount ", amount)
+		print("Chunk ", chunk_position, ": Voxel data size: ", voxel_data.size(), "x", voxel_data[0].size() if voxel_data.size() > 0 else "0", "x", voxel_data[0][0].size() if voxel_data.size() > 0 and voxel_data[0].size() > 0 else "0")
 
 		for x in range(-radius, radius + 1):
 				for y in range(-radius, radius + 1):
@@ -64,13 +90,21 @@ func edit_density_data(local_pos: Vector3, amount: float, affected_chunks: Dicti
 										if edit_pos.x >= 0 and edit_pos.x < CHUNK_WIDTH and \
 										   edit_pos.y >= 0 and edit_pos.y < CHUNK_HEIGHT and \
 										   edit_pos.z >= 0 and edit_pos.z < CHUNK_DEPTH:
+												var old_value = voxel_data[int(edit_pos.x)][int(edit_pos.y)][int(edit_pos.z)]
 												voxel_data[int(edit_pos.x)][int(edit_pos.y)][int(edit_pos.z)] += amount
+												var new_value = voxel_data[int(edit_pos.x)][int(edit_pos.y)][int(edit_pos.z)]
+												if abs(amount) > 0.1:  # Only print for significant changes
+													print("Chunk ", chunk_position, ": Changed voxel at (", edit_pos.x, ", ", edit_pos.y, ", ", edit_pos.z, ") from ", old_value, " to ", new_value)
 												changes_made = true
 										else:
 												_handle_neighbor_edit(edit_pos, amount, affected_chunks)
 
 		if changes_made:
 				affected_chunks[chunk_position] = true
+				print("Chunk ", chunk_position, ": Made changes, affected chunks: ", affected_chunks.keys())
+				print("Chunk ", chunk_position, ": Voxel data modified - will need re-meshing")
+		else:
+			print("Chunk ", chunk_position, ": No changes made")
 
 func _handle_neighbor_edit(edit_pos: Vector3, amount: float, affected_chunks: Dictionary):
 		var neighbor_offset = Vector2i(0, 0)

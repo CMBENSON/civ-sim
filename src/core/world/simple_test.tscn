@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://simple_test_scene"]
+
+[ext_resource type="Script" path="res://src/core/world/simple_test.gd" id="1_simple_test"]
+
+[node name="SimpleTest" type="Node3D"]
+script = ExtResource("1_simple_test")

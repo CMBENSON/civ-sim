@@ -16,13 +16,16 @@ sky_material = SubResource("ProceduralSkyMaterial_83gfb")
 background_mode = 2
 sky = SubResource("Sky_y45m3")
 ambient_light_source = 3
-ambient_light_color = Color(0.458824, 0.635294, 0.823529, 1)
-ambient_light_energy = 0.5
-volumetric_fog_enabled = true
-volumetric_fog_density = 0.02
-volumetric_fog_albedo = Color(0.819608, 0.890196, 1, 1)
+ambient_light_color = Color(0.9, 0.9, 1, 1)
+ambient_light_energy = 0.3
+ssao_enabled = true
+ssao_radius = 2.0
+volumetric_fog_density = 0.0
+volumetric_fog_albedo = Color(0.9, 0.9, 1, 1)
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_ykweg"]
+radius = 0.8
+height = 1.8
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_jyhfs")
@@ -31,13 +34,14 @@ script = ExtResource("1_jyhfs")
 environment = SubResource("Environment_31q0o")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 10, 0)
+transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 100, 0)
+light_energy = 1.2
 shadow_enabled = true
+directional_shadow_mode = 0
+directional_shadow_max_distance = 200.0
 
 [node name="World" parent="." instance=ExtResource("2_jyhfs")]
-WORLD_WIDTH_IN_CHUNKS = null
-CHUNK_SIZE = null
-CHUNK_HEIGHT = null
+WORLD_CIRCUMFERENCE_IN_VOXELS = 1024
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
