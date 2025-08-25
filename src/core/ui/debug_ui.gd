@@ -1,22 +1,21 @@
 # src/core/ui/debug_ui.gd
 extends Control
 
-@onready var fps_label = $MarginContainer/VBoxContainer/FPSLabel
-@onready var pos_label = $MarginContainer/VBoxContainer/PosLabel
-@onready var chunk_label = $MarginContainer/VBoxContainer/ChunkLabel
-@onready var biome_label = $MarginContainer/VBoxContainer/BiomeLabel
-@onready var height_label = $MarginContainer/VBoxContainer/HeightLabel
-@onready var climate_label = $MarginContainer/VBoxContainer/ClimateLabel
-
-# New labels for enhanced debug info
-@onready var system_label = $MarginContainer/VBoxContainer/SystemLabel
-@onready var generation_label = $MarginContainer/VBoxContainer/GenerationLabel
+# Label references - don't use @onready since we create them dynamically
+var fps_label: Label
+var pos_label: Label
+var chunk_label: Label
+var biome_label: Label
+var height_label: Label
+var climate_label: Label
+var system_label: Label
+var generation_label: Label
 
 var player: CharacterBody3D
 var world: Node3D
 
 func _ready():
-	# Create additional labels if they don't exist
+	# Create all labels programmatically
 	_ensure_all_labels_exist()
 
 func _ensure_all_labels_exist():
@@ -29,37 +28,56 @@ func _ensure_all_labels_exist():
 	]
 	
 	for label_name in required_labels:
-		if not has_node("MarginContainer/VBoxContainer/" + label_name):
+		var label_node = vbox.get_node_or_null(label_name)
+		
+		if not label_node:
+			# Create new label
 			var new_label = Label.new()
 			new_label.name = label_name
-			new_label.theme_override_font_sizes/font_size = 24
+			new_label.add_theme_font_size_override("font_size", 24)
 			vbox.add_child(new_label)
-			
-			# Update references
-			match label_name:
-				"FPSLabel": fps_label = new_label
-				"PosLabel": pos_label = new_label  
-				"ChunkLabel": chunk_label = new_label
-				"BiomeLabel": biome_label = new_label
-				"HeightLabel": height_label = new_label
-				"ClimateLabel": climate_label = new_label
-				"SystemLabel": system_label = new_label
-				"GenerationLabel": generation_label = new_label
+			label_node = new_label
+		
+		# Set references - this is the fix for the assignment error
+		_assign_label_reference(label_name, label_node)
+
+func _assign_label_reference(label_name: String, label_node: Label):
+	"""Safely assign label references"""
+	match label_name:
+		"FPSLabel": 
+			fps_label = label_node
+		"PosLabel": 
+			pos_label = label_node
+		"ChunkLabel": 
+			chunk_label = label_node
+		"BiomeLabel": 
+			biome_label = label_node
+		"HeightLabel": 
+			height_label = label_node
+		"ClimateLabel": 
+			climate_label = label_node
+		"SystemLabel": 
+			system_label = label_node
+		"GenerationLabel": 
+			generation_label = label_node
 
 func _process(_delta):
 	# Basic performance info
-	fps_label.text = "FPS: " + str(Engine.get_frames_per_second())
+	if fps_label:
+		fps_label.text = "FPS: " + str(Engine.get_frames_per_second())
 
 	if not is_instance_valid(player) or not is_instance_valid(world):
 		return
 
 	# Player position info
 	var player_pos = player.global_position
-	pos_label.text = "Pos: (%.1f, %.1f, %.1f)" % [player_pos.x, player_pos.y, player_pos.z]
+	if pos_label:
+		pos_label.text = "Pos: (%.1f, %.1f, %.1f)" % [player_pos.x, player_pos.y, player_pos.z]
 
 	# Chunk position info
 	var chunk_pos = world.current_player_chunk
-	chunk_label.text = "Chunk: (%d, %d)" % [chunk_pos.x, chunk_pos.y]
+	if chunk_label:
+		chunk_label.text = "Chunk: (%d, %d)" % [chunk_pos.x, chunk_pos.y]
 
 	# System info - detect which generation system is in use
 	_update_system_info()
@@ -81,6 +99,9 @@ func _process(_delta):
 
 func _update_system_info():
 	"""Update system information display"""
+	if not system_label or not generation_label:
+		return
+		
 	var system_info = "System: "
 	
 	# Detect which generation system is active
@@ -108,6 +129,9 @@ func _update_system_info():
 
 func _update_terrain_info(chunk, wrapped_world_x: int, world_z: int, c_size: int, world_x: int):
 	"""Update terrain-related debug information"""
+	if not biome_label or not height_label or not climate_label:
+		return
+		
 	if is_instance_valid(chunk) and not chunk.biome_data.is_empty():
 		var local_x = int(wrapped_world_x) % c_size
 		var local_z = int(world_z) % c_size
@@ -187,9 +211,12 @@ func _display_debug_info(debug_info: Dictionary):
 
 func _set_loading_labels():
 	"""Set labels to loading state"""
-	biome_label.text = "Biome: Loading..."
-	height_label.text = "Height: Loading..."
-	climate_label.text = "Climate: Loading..."
+	if biome_label:
+		biome_label.text = "Biome: Loading..."
+	if height_label:
+		height_label.text = "Height: Loading..."
+	if climate_label:
+		climate_label.text = "Climate: Loading..."
 
 func get_debug_summary() -> Dictionary:
 	"""Get a summary of current debug information for external tools"""
@@ -218,14 +245,14 @@ func set_debug_level(level: int):
 	"""Set debug verbosity level"""
 	match level:
 		0: # Minimal
-			system_label.visible = false
-			generation_label.visible = false
+			if system_label: system_label.visible = false
+			if generation_label: generation_label.visible = false
 		1: # Standard  
-			system_label.visible = true
-			generation_label.visible = false
+			if system_label: system_label.visible = true
+			if generation_label: generation_label.visible = false
 		2: # Verbose
-			system_label.visible = true  
-			generation_label.visible = true
+			if system_label: system_label.visible = true  
+			if generation_label: generation_label.visible = true
 			if world and world.has_method("set"):
 				world.verbose_logging = true
 
