@@ -62,29 +62,42 @@ func update_player_position(player_position: Vector3) -> bool:
 	return false
 
 func update_chunks():
-	"""Update which chunks should be loaded based on player position"""
+	"""Update which chunks should be loaded based on player position with priority loading"""
 	var chunks_to_load = {}
 	var chunks_to_remove = []
+	var chunk_priorities = []  # Store chunks with distances for priority loading
 
-	# Determine which chunks should be loaded
+	# Determine which chunks should be loaded and calculate priorities
 	for x in range(-view_distance, view_distance + 1):
 		for z in range(-view_distance, view_distance + 1):
 			var chunk_pos = current_player_chunk + Vector2i(x, z)
 			# Wrap east-west coordinate for cylindrical world
 			chunk_pos.x = wrapi(chunk_pos.x, 0, world_width_in_chunks)
+			
+			# Calculate priority (distance from player)
+			var distance = Vector2i(x, z).length()
+			chunk_priorities.append({
+				"position": chunk_pos,
+				"distance": distance,
+				"offset": Vector2i(x, z)
+			})
 			chunks_to_load[chunk_pos] = true
+
+	# Sort chunks by distance (closest first)
+	chunk_priorities.sort_custom(func(a, b): return a.distance < b.distance)
 
 	# Find chunks to remove
 	for chunk_pos in loaded_chunks:
 		if not chunks_to_load.has(chunk_pos):
 			chunks_to_remove.append(chunk_pos)
 
-	# Remove distant chunks
+	# Remove distant chunks first
 	for chunk_pos in chunks_to_remove:
 		unload_chunk(chunk_pos)
 
-	# Load new chunks
-	for chunk_pos in chunks_to_load:
+	# Load new chunks in priority order (closest first)
+	for chunk_info in chunk_priorities:
+		var chunk_pos = chunk_info.position
 		if not loaded_chunks.has(chunk_pos):
 			load_chunk(chunk_pos)
 
@@ -156,20 +169,32 @@ func is_chunk_loaded(chunk_pos: Vector2i) -> bool:
 	return loaded_chunks.has(chunk_pos)
 
 func load_initial_chunks(center_pos: Vector2i = Vector2i.ZERO):
-	"""Load a set of initial chunks around a center position"""
-	var initial_chunks = [
-		center_pos, center_pos + Vector2i(1, 0), center_pos + Vector2i(0, 1), center_pos + Vector2i(1, 1),
-		center_pos + Vector2i(-1, 0), center_pos + Vector2i(0, -1), center_pos + Vector2i(-1, -1), 
-		center_pos + Vector2i(1, -1), center_pos + Vector2i(-1, 1)
-	]
+	"""Load initial chunks in spiral/priority order from center outward"""
+	var initial_chunks_with_priority = []
 	
-	for chunk_pos in initial_chunks:
-		# Wrap east-west coordinates
-		var wrapped_pos = Vector2i(wrapi(chunk_pos.x, 0, world_width_in_chunks), chunk_pos.y)
-		load_chunk(wrapped_pos)
+	# Create a larger initial set for better coverage
+	for x in range(-2, 3):  # 5x5 grid of chunks
+		for z in range(-2, 3):
+			var chunk_pos = center_pos + Vector2i(x, z)
+			# Wrap east-west coordinates
+			chunk_pos.x = wrapi(chunk_pos.x, 0, world_width_in_chunks)
+			
+			var distance = Vector2i(x, z).length()
+			initial_chunks_with_priority.append({
+				"position": chunk_pos,
+				"distance": distance
+			})
+	
+	# Sort by distance (closest first)
+	initial_chunks_with_priority.sort_custom(func(a, b): return a.distance < b.distance)
+	
+	# Load chunks in priority order
+	for chunk_info in initial_chunks_with_priority:
+		load_chunk(chunk_info.position)
 	
 	if verbose_logging:
-		print("ChunkManager: Loaded ", initial_chunks.size(), " initial chunks around ", center_pos)
+		print("ChunkManager: Loaded ", initial_chunks_with_priority.size(), " initial chunks in priority order around ", center_pos)
+
 
 func force_regenerate_chunk(chunk_pos: Vector2i):
 	"""Force regeneration of a specific chunk"""
@@ -211,13 +236,20 @@ func cleanup():
 		print("ChunkManager: Cleanup complete")
 
 func get_stats() -> Dictionary:
-	"""Get statistics about chunk management"""
+	"""Get enhanced statistics about chunk management"""
+	var chunks_by_distance = get_chunks_by_distance()
+	var closest_chunk = chunks_by_distance[0] if chunks_by_distance.size() > 0 else null
+	var farthest_chunk = chunks_by_distance[-1] if chunks_by_distance.size() > 0 else null
+	
 	var stats = {
 		"loaded_chunks": loaded_chunks.size(),
 		"current_player_chunk": current_player_chunk,
 		"view_distance": view_distance,
 		"world_width_in_chunks": world_width_in_chunks,
-		"chunk_size": chunk_size
+		"chunk_size": chunk_size,
+		"closest_chunk_distance": closest_chunk.distance if closest_chunk else 0.0,
+		"farthest_chunk_distance": farthest_chunk.distance if farthest_chunk else 0.0,
+		"average_chunk_distance": _calculate_average_chunk_distance(chunks_by_distance)
 	}
 	
 	if thread_manager:
@@ -263,3 +295,37 @@ func get_surface_height(world_x: float, world_z: float) -> float:
 	
 	# Fallback: return sea level + some default height
 	return 30.0
+	
+func get_chunks_by_distance() -> Array:
+	"""Get all loaded chunks sorted by distance from player"""
+	var chunks_with_distance = []
+	
+	for chunk_pos in loaded_chunks:
+		var offset = chunk_pos - current_player_chunk
+		# Handle wrap-around distance calculation
+		if offset.x > world_width_in_chunks / 2:
+			offset.x -= world_width_in_chunks
+		elif offset.x < -world_width_in_chunks / 2:
+			offset.x += world_width_in_chunks
+		
+		var distance = offset.length()
+		chunks_with_distance.append({
+			"position": chunk_pos,
+			"chunk": loaded_chunks[chunk_pos],
+			"distance": distance,
+			"offset": offset
+		})
+	
+	chunks_with_distance.sort_custom(func(a, b): return a.distance < b.distance)
+	return chunks_with_distance
+
+
+func _calculate_average_chunk_distance(chunks_by_distance: Array) -> float:
+	if chunks_by_distance.is_empty():
+		return 0.0
+	
+	var total_distance = 0.0
+	for chunk_info in chunks_by_distance:
+		total_distance += chunk_info.distance
+	
+	return total_distance / float(chunks_by_distance.size())
