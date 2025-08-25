@@ -12,7 +12,8 @@ const MarchingCubesData = preload("res://src/core/world/marching_cubes.gd")
 @export var CHUNK_SIZE: int = 16 : set = _set_chunk_size
 @export var WORLD_CIRCUMFERENCE_IN_VOXELS: int = WORLD_WIDTH_IN_CHUNKS * CHUNK_SIZE
 @export var CHUNK_HEIGHT : int = 256
-
+var use_modular_generation: bool = true
+var modular_generator: ModularWorldGenerator
 var is_preview = false
 var verbose_logging: bool = false  # Control debug output
 
@@ -55,13 +56,14 @@ func _ready():
 	if verbose_logging:
 		print("World dimensions: ", WORLD_WIDTH_IN_CHUNKS, " chunks x ", CHUNK_SIZE, " voxels = ", WORLD_CIRCUMFERENCE_IN_VOXELS, " total voxels")
 
-	# Create a simple generator with the world dimensions
-	generator = WorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
-	generator.chunk_height = CHUNK_HEIGHT
-	generator.verbose_logging = verbose_logging  # Pass verbose flag to generator
-
-	# Optional: tweak sea_level or chunk_height here if needed
-	generator.sea_level = 28.0
+	if use_modular_generation:
+		_initialize_modular_system()
+	else:
+		# Keep existing system
+		generator = WorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
+		generator.chunk_height = CHUNK_HEIGHT
+		generator.verbose_logging = verbose_logging
+		generator.sea_level = 28.0
 
 	# Print debug info to help diagnose terrain issues (only if verbose logging enabled)
 	if generator.has_method("print_biome_debug_info") and verbose_logging:
@@ -392,3 +394,17 @@ func load_initial_chunks():
 		# Wrap east-west coordinates
 		var wrapped_pos = Vector2i(wrapi(chunk_pos.x, 0, WORLD_WIDTH_IN_CHUNKS), chunk_pos.y)
 		load_chunk(wrapped_pos)
+
+func _initialize_modular_system():
+	print("World: Initializing modular generation system")
+	
+	# Create modular generator
+	modular_generator = ModularWorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
+	modular_generator.sea_level = 28.0
+	modular_generator.chunk_height = CHUNK_HEIGHT
+	modular_generator.verbose_logging = verbose_logging
+	
+	# Use modular generator as the main generator
+	generator = modular_generator
+	
+	print("World: Modular system initialized successfully")
