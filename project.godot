@@ -20,7 +20,7 @@ WorldData="*res://src/core/WorldData.gd"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/world_preview/plugin.cfg")
+enabled=PackedStringArray("res://addons/world_analyzer/plugin.cfg", "res://addons/world_preview/plugin.cfg")
 
 [input]
 

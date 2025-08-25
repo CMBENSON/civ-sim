@@ -95,121 +95,16 @@ func _unhandled_input(event):
 
 func _physics_process(delta):
 	if is_flying:
-		_handle_flying_movement(delta)
+		PlayerMovement.handle_flying_movement(self, delta)
 	else:
-		_handle_walking_movement(delta)
+		PlayerMovement.handle_walking_movement(self, delta)
 	
 	# Handle continuous terrain editing
 	if is_editing and world_node != null:
-		print("Player: Performing terrain edit (mode: ", edit_mode, ", strength: ", edit_strength, ")")
 		perform_terrain_edit()
 	elif is_editing and world_node == null:
 		print("Player: ERROR - Cannot edit terrain, world_node is null!")
 		is_editing = false
-
-func _handle_flying_movement(delta):
-	# Flight movement
-	var current_speed = FLY_SPEED
-	if Input.is_key_pressed(KEY_SHIFT):
-		current_speed = FLY_SPEED * 3.0
-
-	# Get movement input - using both WASD and arrow keys
-	var input_dir = Vector2.ZERO
-	
-	# WASD input
-	if Input.is_key_pressed(KEY_W):
-		input_dir.y -= 1
-	if Input.is_key_pressed(KEY_S):
-		input_dir.y += 1
-	if Input.is_key_pressed(KEY_A):
-		input_dir.x -= 1
-	if Input.is_key_pressed(KEY_D):
-		input_dir.x += 1
-	
-	# Also check arrow keys as fallback
-	if Input.is_action_pressed("ui_up"):
-		input_dir.y -= 1
-	if Input.is_action_pressed("ui_down"):
-		input_dir.y += 1
-	if Input.is_action_pressed("ui_left"):
-		input_dir.x -= 1
-	if Input.is_action_pressed("ui_right"):
-		input_dir.x += 1
-	
-	input_dir = input_dir.normalized()
-	
-	var direction = (head.transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
-	
-	# Apply horizontal velocity
-	if direction:
-		velocity.x = direction.x * current_speed
-		velocity.z = direction.z * current_speed
-	else:
-		velocity.x = move_toward(velocity.x, 0, current_speed * delta * 3)
-		velocity.z = move_toward(velocity.z, 0, current_speed * delta * 3)
-
-	# Get vertical movement input
-	var vertical_movement = 0.0
-	if Input.is_key_pressed(KEY_SPACE):  # Spacebar to go up
-		vertical_movement += current_speed
-	if Input.is_key_pressed(KEY_CTRL):  # Ctrl to go down
-		vertical_movement -= current_speed
-		
-	# Apply vertical velocity
-	velocity.y = vertical_movement
-
-	move_and_slide()
-
-func _handle_walking_movement(delta):
-	# Walking movement with gravity
-	var current_speed = WALK_SPEED
-	if Input.is_key_pressed(KEY_SHIFT):
-		current_speed = WALK_SPEED * 2.0
-
-	# Get movement input
-	var input_dir = Vector2.ZERO
-	
-	# WASD input
-	if Input.is_key_pressed(KEY_W):
-		input_dir.y -= 1
-	if Input.is_key_pressed(KEY_S):
-		input_dir.y += 1
-	if Input.is_key_pressed(KEY_A):
-		input_dir.x -= 1
-	if Input.is_key_pressed(KEY_D):
-		input_dir.x += 1
-	
-	# Arrow keys as fallback
-	if Input.is_action_pressed("ui_up"):
-		input_dir.y -= 1
-	if Input.is_action_pressed("ui_down"):
-		input_dir.y += 1
-	if Input.is_action_pressed("ui_left"):
-		input_dir.x -= 1
-	if Input.is_action_pressed("ui_right"):
-		input_dir.x += 1
-	
-	input_dir = input_dir.normalized()
-	
-	var direction = (head.transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
-	
-	# Apply horizontal velocity
-	if direction:
-		velocity.x = direction.x * current_speed
-		velocity.z = direction.z * current_speed
-	else:
-		velocity.x = move_toward(velocity.x, 0, current_speed * delta * 3)
-		velocity.z = move_toward(velocity.z, 0, current_speed * delta * 3)
-
-	# Handle jumping
-	if Input.is_key_pressed(KEY_SPACE) and is_on_floor():
-		velocity.y = JUMP_VELOCITY
-
-	# Apply gravity
-	if not is_on_floor():
-		velocity.y -= 9.8 * delta
-
-	move_and_slide()
 
 func perform_terrain_edit():
 	if not raycast.is_colliding():

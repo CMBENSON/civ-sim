@@ -28,7 +28,7 @@ func _init(p_world_circumference_voxels: int, p_chunk_size: int) -> void:
 	continent_noise = FastNoiseLite.new()
 	continent_noise.noise_type = FastNoiseLite.TYPE_PERLIN
 	continent_noise.seed = randi()
-	continent_noise.frequency = 0.0015
+	continent_noise.frequency = 0.0008
 
 	# Base hills: higher frequency for more varied rolling terrain
 	base_noise = FastNoiseLite.new()
@@ -46,12 +46,12 @@ func _init(p_world_circumference_voxels: int, p_chunk_size: int) -> void:
 	temp_noise = FastNoiseLite.new()
 	temp_noise.noise_type = FastNoiseLite.TYPE_PERLIN
 	temp_noise.seed = randi()
-	temp_noise.frequency = 0.005
+	temp_noise.frequency = 0.002
 
 	moisture_noise = FastNoiseLite.new()
 	moisture_noise.noise_type = FastNoiseLite.TYPE_PERLIN
 	moisture_noise.seed = randi()
-	moisture_noise.frequency = 0.005
+	moisture_noise.frequency = 0.002
 
 	# Detail noise adds small-scale variation
 	detail_noise = FastNoiseLite.new()
@@ -203,3 +203,20 @@ func _get_raw_height(world_x: float, world_z: float) -> float:
 	height += detail_height
 
 	return height
+	
+func get_debug_info(world_x: float, world_z: float) -> Dictionary:
+	var height = get_height(world_x, world_z, chunk_height)
+	var biome = get_biome(world_x, world_z)
+	var temp = get_temperature_01(world_x, world_z)
+	var moisture = get_moisture_01(world_x, world_z)
+	var cont_val = continent_noise.get_noise_2d(world_x, world_z)
+	
+	return {
+		"height": height,
+		"biome": biome,
+		"temperature": temp,
+		"moisture": moisture,
+		"continent_value": cont_val,
+		"sea_level": sea_level,
+		"is_ocean": is_ocean(world_x, world_z)
+	}
