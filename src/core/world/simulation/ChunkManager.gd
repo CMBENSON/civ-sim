@@ -286,15 +286,43 @@ func get_surface_height(world_x: float, world_z: float) -> float:
 		if local_x < 0: local_x += chunk_size
 		if local_z < 0: local_z += chunk_size
 		
-		# Find highest solid voxel in this column
-		if local_x < chunk.voxel_data.size() and chunk.voxel_data[local_x].size() > 0:
+		# DEBUGGING: Print what we're looking for
+		if verbose_logging:
+			print("ChunkManager: Looking for surface at world(", world_x, ",", world_z, ") -> local(", local_x, ",", local_z, ") in chunk ", chunk.chunk_position)
+			print("ChunkManager: Chunk voxel_data size: ", chunk.voxel_data.size(), "x", chunk.voxel_data[0].size() if chunk.voxel_data.size() > 0 else "0", "x", chunk.voxel_data[0][0].size() if chunk.voxel_data.size() > 0 and chunk.voxel_data[0].size() > 0 else "0")
+		
+		# Ensure we're within bounds
+		if local_x >= 0 and local_x < chunk.voxel_data.size() and local_z >= 0:
+			# Find highest solid voxel in this column (search from top down)
 			for y in range(chunk.CHUNK_HEIGHT - 1, -1, -1):
-				if y < chunk.voxel_data[local_x].size() and \
-				   local_z < chunk.voxel_data[local_x][y].size() and \
-				   chunk.voxel_data[local_x][y][local_z] > 0.0:
-					return float(y) + 1.0
+				if y < chunk.voxel_data[local_x].size() and local_z < chunk.voxel_data[local_x][y].size():
+					var density = chunk.voxel_data[local_x][y][local_z]
+					if density > 0.0:  # Found solid voxel
+						if verbose_logging:
+							print("ChunkManager: Found surface at height ", y, " with density ", density)
+						return float(y) + 1.0  # Return position above the solid voxel
+			
+			# If no solid voxels found, might be all air or all ocean
+			if verbose_logging:
+				print("ChunkManager: No solid voxels found in column, using generator fallback")
+		else:
+			if verbose_logging:
+				print("ChunkManager: Local coordinates out of bounds: ", local_x, ",", local_z)
+	else:
+		if verbose_logging:
+			var reason = "chunk not found" if not is_instance_valid(chunk) else "chunk has no voxel data"
+			print("ChunkManager: Cannot get height from chunk (", reason, "), using generator fallback")
 	
-	# Fallback: return sea level + some default height
+	# Fallback: Use generator to get expected height
+	if world_node and world_node.generator:
+		var height = world_node.generator.get_height(world_x, world_z, chunk.CHUNK_HEIGHT if is_instance_valid(chunk) else 256)
+		if verbose_logging:
+			print("ChunkManager: Generator fallback height: ", height)
+		return height
+	
+	# Final fallback
+	if verbose_logging:
+		print("ChunkManager: Using final fallback height: 30.0")
 	return 30.0
 	
 func get_chunks_by_distance() -> Array:

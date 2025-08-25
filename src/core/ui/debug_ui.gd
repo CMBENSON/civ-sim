@@ -74,12 +74,12 @@ func _process(_delta):
 	if pos_label:
 		pos_label.text = "Pos: (%.1f, %.1f, %.1f)" % [player_pos.x, player_pos.y, player_pos.z]
 
-	# Chunk position info
+	# Chunk position info - now uses ChunkManager
 	var chunk_pos = world.current_player_chunk
 	if chunk_label:
 		chunk_label.text = "Chunk: (%d, %d)" % [chunk_pos.x, chunk_pos.y]
 
-	# System info - detect which generation system is in use
+	# System info - FIXED detection
 	_update_system_info()
 
 	# Get world coordinates
@@ -87,52 +87,75 @@ func _process(_delta):
 	var world_z = floori(player_pos.z)
 	var wrapped_world_x = wrapi(world_x, 0, world.WORLD_CIRCUMFERENCE_IN_VOXELS)
 
-	# Calculate local chunk coordinates
-	var c_size = world.CHUNK_SIZE
-	var c_pos_x = floor(wrapped_world_x / float(c_size))
-	var c_pos_z = floor(world_z / float(c_size))
-	var current_chunk_pos = Vector2i(c_pos_x, c_pos_z)
-
-	# Get chunk and display terrain info
-	var chunk = world.loaded_chunks.get(current_chunk_pos)
-	_update_terrain_info(chunk, wrapped_world_x, world_z, c_size, world_x)
+	# Use ChunkManager for chunk info
+	_update_terrain_info_with_chunk_manager(wrapped_world_x, world_z, world_x)
 
 func _update_system_info():
-	"""Update system information display"""
+	"""Update system information display - FIXED"""
 	if not system_label or not generation_label:
 		return
 		
 	var system_info = "System: "
 	
-	# Detect which generation system is active
-	if world.use_modular_generation:
+	# FIXED: Check for modular system properly
+	if world.use_modular_generation and world.has_method("_initialize_modular_system"):
 		system_info += "Modular"
 		
-		# Show generation stats if available
-		if world.generator and world.generator.has_method("get_all_tuning_parameters"):
-			var loaded_chunks = world.loaded_chunks.size()
-			var queue_size = 0
-			if world.has_method("generation_queue"):
-				queue_size = world.generation_queue.size()
-			generation_label.text = "Chunks: %d loaded, %d queued" % [loaded_chunks, queue_size]
+		# Check if we're using ChunkManager
+		if world.has_method("chunk_manager") or "chunk_manager" in world:
+			system_info += " + ChunkManager"
+		
+		# Show chunk and generation stats
+		var loaded_chunks = 0
+		var queue_size = 0
+		var active_threads = 0
+		
+		if world.chunk_manager:
+			loaded_chunks = world.chunk_manager.get_chunk_count()
+			if world.thread_manager:
+				var stats = world.thread_manager.get_stats()
+				queue_size = stats.get("queue_size", 0)
+				active_threads = stats.get("active_threads", 0)
 		else:
-			generation_label.text = "Generation: Standard"
+			loaded_chunks = world.loaded_chunks.size()
+		
+		generation_label.text = "Chunks: %d | Queue: %d | Threads: %d" % [loaded_chunks, queue_size, active_threads]
 	else:
-		system_info += "Original"
-		generation_label.text = "Generation: WorldGenerator"
+		system_info += "Legacy"
+		generation_label.text = "Generation: WorldGenerator (Old System)"
 	
 	# Add performance indicators
 	if world.verbose_logging:
 		system_info += " (Verbose)"
 	
+	# Add spawn status
+	if world.has_method("spawn_ready") or "spawn_ready" in world:
+		if world.spawn_ready:
+			system_info += " [Ready]"
+		else:
+			system_info += " [Loading...]"
+	
 	system_label.text = system_info
 
-func _update_terrain_info(chunk, wrapped_world_x: int, world_z: int, c_size: int, world_x: int):
-	"""Update terrain-related debug information"""
+func _update_terrain_info_with_chunk_manager(wrapped_world_x: int, world_z: int, world_x: int):
+	"""Update terrain information using ChunkManager"""
 	if not biome_label or not height_label or not climate_label:
 		return
-		
+	
+	# Try to get chunk through ChunkManager
+	var chunk = null
+	if world.chunk_manager:
+		chunk = world.chunk_manager.get_chunk_at_position(Vector3(wrapped_world_x, 0, world_z))
+	else:
+		# Fallback to old system
+		var chunk_pos = Vector2i(
+			floor(wrapped_world_x / float(world.CHUNK_SIZE)), 
+			floor(world_z / float(world.CHUNK_SIZE))
+		)
+		chunk = world.loaded_chunks.get(chunk_pos)
+	
 	if is_instance_valid(chunk) and not chunk.biome_data.is_empty():
+		var c_size = world.CHUNK_SIZE
 		var local_x = int(wrapped_world_x) % c_size
 		var local_z = int(world_z) % c_size
 		if local_z < 0: 
@@ -232,7 +255,7 @@ func get_debug_summary() -> Dictionary:
 		"player_position": player_pos,
 		"chunk_position": world.current_player_chunk,
 		"world_coordinates": Vector2i(world_x, world_z),
-		"system_type": "Modular" if (world.has_method("use_modular_generation") and world.use_modular_generation) else "Original"
+		"system_type": "Modular + ChunkManager" if world.use_modular_generation else "Legacy"
 	}
 	
 	# Add generator-specific info
