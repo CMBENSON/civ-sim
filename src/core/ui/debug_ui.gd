@@ -105,7 +105,7 @@ func _update_system_info():
 	var system_info = "System: "
 	
 	# Detect which generation system is active
-	if world.has_method("use_modular_generation") and world.use_modular_generation:
+	if world.use_modular_generation:
 		system_info += "Modular"
 		
 		# Show generation stats if available

@@ -4,13 +4,14 @@ extends PanelContainer
 
 const WorldScene = preload("res://src/core/world/world.tscn")
 
-@onready var generate_button     = $VBoxContainer/Button
-@onready var progress_bar        = $VBoxContainer/ProgressBar
-@onready var viewport_container  = $VBoxContainer/SubViewportContainer
-@onready var verbose_toggle      = $VBoxContainer/VerboseToggle
+# UI Components - will be created programmatically
+var generate_button: Button
+var progress_bar: ProgressBar
+var viewport_container: SubViewportContainer
+var verbose_toggle: CheckBox
 
 # The SubViewport we render the 3D world into
-@onready var sub_viewport : SubViewport = SubViewport.new()
+var sub_viewport: SubViewport
 
 var preview_world : Node3D
 var preview_camera : Camera3D
@@ -25,25 +26,52 @@ var stop_button : Button
 # Flag to avoid regenerating the map on every process tick
 var biome_map_generated : bool = false
 
-func _ready() -> void:
-	generate_button.text = "Generate Full Preview"
-	generate_button.pressed.connect(_on_generate_pressed)
+func _create_ui_elements():
+	"""Create UI elements programmatically"""
+	var vbox = VBoxContainer.new()
+	add_child(vbox)
+	
+	generate_button = Button.new()
+	vbox.add_child(generate_button)
+	
+	progress_bar = ProgressBar.new()
+	vbox.add_child(progress_bar)
+	
+	viewport_container = SubViewportContainer.new()
+	vbox.add_child(viewport_container)
+	
+	verbose_toggle = CheckBox.new()
+	verbose_toggle.text = "Verbose Logging"
+	vbox.add_child(verbose_toggle)
 
-	# Create the stop button programmatically and add it next to the generate button
+func _ready() -> void:
+	# Create UI elements programmatically
+	_create_ui_elements()
+	
+	if generate_button:
+		generate_button.text = "Generate Full Preview"
+		generate_button.pressed.connect(_on_generate_pressed)
+
+	# Create the stop button programmatically
 	stop_button = Button.new()
 	stop_button.text = "Stop"
 	stop_button.visible = false
 	stop_button.pressed.connect(_on_stop_pressed)
-	$VBoxContainer.add_child(stop_button)
+	
+	var vbox = get_child(0) if get_child_count() > 0 else null
+	if vbox:
+		vbox.add_child(stop_button)
 
-	# Insert the SubViewport into the viewport container
-	viewport_container.add_child(sub_viewport)
-
-	# Set up the camera (orthographic)
-	preview_camera = Camera3D.new()
-	preview_camera.near = 0.1
-	preview_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	sub_viewport.add_child(preview_camera)
+	# Set up viewport if available
+	if viewport_container:
+		sub_viewport = SubViewport.new()
+		viewport_container.add_child(sub_viewport)
+		
+		# Set up the camera (orthographic)
+		preview_camera = Camera3D.new()
+		preview_camera.near = 0.1
+		preview_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		sub_viewport.add_child(preview_camera)
 
 	# Create a TextureRect for the biome map and add it to the panel
 	map_texture_rect = TextureRect.new()

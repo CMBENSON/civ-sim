@@ -2,20 +2,20 @@
 @tool
 extends PanelContainer
 
-# UI Components
-@onready var analysis_button: Button = $VBoxContainer/AnalysisButton
-@onready var export_button: Button = $VBoxContainer/ExportButton
-@onready var regenerate_button: Button = $VBoxContainer/RegenerateButton
-@onready var progress_bar: ProgressBar = $VBoxContainer/ProgressBar
-@onready var biome_display: VBoxContainer = $VBoxContainer/ScrollContainer/VBoxContainer/BiomeStats
-@onready var height_display: VBoxContainer = $VBoxContainer/ScrollContainer/VBoxContainer/HeightStats
-@onready var world_preview: TextureRect = $VBoxContainer/ScrollContainer/VBoxContainer/WorldPreview
-@onready var parameter_controls: VBoxContainer = $VBoxContainer/ScrollContainer/VBoxContainer/Parameters
+# UI Components - will be created programmatically
+var analysis_button: Button
+var export_button: Button
+var regenerate_button: Button
+var progress_bar: ProgressBar
+var biome_display: VBoxContainer
+var height_display: VBoxContainer
+var world_preview: TextureRect
+var parameter_controls: VBoxContainer
 
 # Generation controls
-@onready var sample_size_spin: SpinBox = $VBoxContainer/SampleControls/SampleSizeSpinBox
-@onready var preview_resolution_spin: SpinBox = $VBoxContainer/SampleControls/PreviewResolutionSpinBox
-@onready var verbose_toggle: CheckBox = $VBoxContainer/SampleControls/VerboseToggle
+var sample_size_spin: SpinBox
+var preview_resolution_spin: SpinBox
+var verbose_toggle: CheckBox
 
 # Analysis data
 var current_analysis: Dictionary = {}
@@ -27,10 +27,13 @@ func _ready():
 	_create_ui_elements()
 	_connect_signals()
 	
-	# Initialize with default values
-	sample_size_spin.value = 1000
-	preview_resolution_spin.value = 256
-	verbose_toggle.button_pressed = false
+	# Initialize with default values if components were created successfully
+	if sample_size_spin:
+		sample_size_spin.value = 1000
+	if preview_resolution_spin:
+		preview_resolution_spin.value = 256
+	if verbose_toggle:
+		verbose_toggle.button_pressed = false
 
 func _create_ui_elements():
 	"""Create all UI elements programmatically"""

@@ -287,9 +287,10 @@ func get_surface_height(world_x: float, world_z: float) -> float:
 		if local_z < 0: local_z += chunk_size
 		
 		# Find highest solid voxel in this column
-		if local_x < chunk.voxel_data.size() and local_z < chunk.voxel_data[0].size():
+		if local_x < chunk.voxel_data.size() and chunk.voxel_data[local_x].size() > 0:
 			for y in range(chunk.CHUNK_HEIGHT - 1, -1, -1):
-				if y < chunk.voxel_data[0].size() and \
+				if y < chunk.voxel_data[local_x].size() and \
+				   local_z < chunk.voxel_data[local_x][y].size() and \
 				   chunk.voxel_data[local_x][y][local_z] > 0.0:
 					return float(y) + 1.0
 	

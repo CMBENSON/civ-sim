@@ -16,16 +16,22 @@ const MarchingCubesData = preload("res://src/core/world/marching_cubes.gd")
 # System configuration
 var use_modular_generation: bool = true
 var is_preview: bool = false
-var verbose_logging: bool = false
+var verbose_logging: bool = true
 
 # Core systems
 var generator: RefCounted
-var world_material: ShaderMaterial = ShaderMaterial.new()
+var world_material: Material = ShaderMaterial.new()
 var chunk_manager: ChunkManager
 var thread_manager: ThreadManager
 
 # Player reference
-var player: CharacterBody3D
+var player: CharacterBody3D:
+	set(value):
+		player = value
+		if player:
+			print("World: Player reference set to: ", player.name)
+		else:
+			print("World: Player reference cleared")
 
 # Internal state
 var is_first_update: bool = true
@@ -46,6 +52,9 @@ var loaded_chunks: Dictionary :
 		return chunk_manager.loaded_chunks if chunk_manager else {}
 
 func _ready():
+	if Engine.is_editor_hint() and not is_preview:
+		return
+	
 	print("World: Initializing consolidated world system...")
 	
 	# Load shader
@@ -72,12 +81,19 @@ func _ready():
 		_test_coordinate_system()
 	
 	print("World: Initialization complete")
+	
+	# Generate initial chunk around origin to trigger world generation (only in game, not editor)
+	if chunk_manager and not Engine.is_editor_hint():
+		print("World: Requesting initial chunk generation around origin")
+		chunk_manager.update_player_position(Vector3.ZERO)
 
 func _process(_delta):
 	if Engine.is_editor_hint() and not is_preview:
 		return
 	
 	if not is_instance_valid(player):
+		if verbose_logging:
+			print("World: Player reference not valid in _process")
 		return
 	
 	# Update chunk management based on player position
@@ -98,10 +114,14 @@ func _initialize_shader():
 	"""Initialize the triplanar shader system"""
 	var triplanar_shader = load("res://assets/shaders/triplanar.gdshader")
 	if not triplanar_shader:
-		print("ERROR: Failed to load triplanar shader!")
+		print("World: WARNING - Failed to load triplanar shader, using default material")
+		# Create a basic material as fallback
+		world_material = StandardMaterial3D.new()
+		(world_material as StandardMaterial3D).albedo_color = Color(0.5, 0.7, 0.3)
 		return
 	
-	world_material.shader = triplanar_shader
+	if world_material is ShaderMaterial:
+		(world_material as ShaderMaterial).shader = triplanar_shader
 	
 	if verbose_logging:
 		print("World: Triplanar shader loaded successfully")
@@ -121,11 +141,23 @@ func _initialize_generation_system():
 	if use_modular_generation:
 		print("World: Using modular generation system")
 		var ModularWorldGenerator = load("res://src/core/world/ModularWorldGenerator.gd")
-		generator = ModularWorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
-	else:
+		if not ModularWorldGenerator:
+			print("World: ERROR - Failed to load ModularWorldGenerator, falling back to legacy")
+			use_modular_generation = false
+		else:
+			generator = ModularWorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
+	
+	if not use_modular_generation:
 		print("World: Using legacy generation system")
 		var WorldGenerator = load("res://src/core/world/WorldGenerator.gd")
+		if not WorldGenerator:
+			print("World: CRITICAL ERROR - No world generator available!")
+			return
 		generator = WorldGenerator.new(WORLD_CIRCUMFERENCE_IN_VOXELS, CHUNK_SIZE)
+	
+	if not generator:
+		print("World: CRITICAL ERROR - Failed to create generator!")
+		return
 	
 	# Configure generator
 	generator.sea_level = 28.0
@@ -137,18 +169,38 @@ func _initialize_generation_system():
 
 func _initialize_chunk_system():
 	"""Initialize chunk management and threading systems"""
+	if not generator:
+		print("World: ERROR - Cannot initialize chunk system without generator")
+		return
+	
 	# Initialize marching cubes data
+	if not MarchingCubesData:
+		print("World: ERROR - MarchingCubesData not available")
+		return
+	
 	tri_table_copy = MarchingCubesData.TRI_TABLE.duplicate(true)
 	edge_table_copy = MarchingCubesData.EDGE_TABLE.duplicate(true)
 	
 	# Create thread manager
 	thread_manager = ThreadManager.new(max_threads)
+	if not thread_manager:
+		print("World: ERROR - Failed to create ThreadManager")
+		return
+	
 	thread_manager.setup_dependencies(generator, tri_table_copy, edge_table_copy)
 	thread_manager.set_verbose_logging(verbose_logging)
 	thread_manager.chunk_generation_completed.connect(_on_chunk_generation_completed)
 	
 	# Create chunk manager
 	chunk_manager = ChunkManager.new(WORLD_WIDTH_IN_CHUNKS, CHUNK_SIZE, VIEW_DISTANCE)
+	if not chunk_manager:
+		print("World: ERROR - Failed to create ChunkManager")
+		return
+	
+	if not ChunkScene:
+		print("World: ERROR - ChunkScene not loaded")
+		return
+	
 	chunk_manager.setup_dependencies(self, ChunkScene, world_material, thread_manager)
 	chunk_manager.set_verbose_logging(verbose_logging)
 	
@@ -164,6 +216,10 @@ func _initialize_chunk_system():
 
 func get_canonical_world_pos(world_pos: Vector3) -> Vector3:
 	"""Convert any world position to canonical coordinates with proper wrapping"""
+	if not _validate_world_position(world_pos):
+		print("World: WARNING - Invalid world position: ", world_pos)
+		return Vector3.ZERO
+	
 	var canonical_x = fmod(world_pos.x, float(WORLD_CIRCUMFERENCE_IN_VOXELS))
 	if canonical_x < 0:
 		canonical_x += float(WORLD_CIRCUMFERENCE_IN_VOXELS)
@@ -172,6 +228,10 @@ func get_canonical_world_pos(world_pos: Vector3) -> Vector3:
 
 func world_pos_to_chunk_pos(world_pos: Vector3) -> Vector2i:
 	"""Convert world position to chunk coordinates"""
+	if not _validate_world_position(world_pos):
+		print("World: ERROR - Invalid world position for chunk conversion: ", world_pos)
+		return Vector2i.ZERO
+	
 	var canonical_pos = get_canonical_world_pos(world_pos)
 	var chunk_x = wrapi(int(floor(canonical_pos.x / CHUNK_SIZE)), 0, WORLD_WIDTH_IN_CHUNKS)
 	var chunk_z = int(floor(canonical_pos.z / CHUNK_SIZE))
@@ -183,6 +243,10 @@ func chunk_pos_to_world_pos(chunk_pos: Vector2i) -> Vector3:
 
 func wrap_world_x(world_x: float) -> float:
 	"""Wrap X coordinate for cylindrical world"""
+	if not is_finite(world_x):
+		print("World: ERROR - Non-finite X coordinate: ", world_x)
+		return 0.0
+	
 	var wrapped = fmod(world_x, float(WORLD_CIRCUMFERENCE_IN_VOXELS))
 	if wrapped < 0:
 		wrapped += float(WORLD_CIRCUMFERENCE_IN_VOXELS)
@@ -205,10 +269,14 @@ func calculate_wrapped_distance(pos1: Vector3, pos2: Vector3) -> Vector3:
 
 func get_surface_height(world_x: float, world_z: float) -> float:
 	"""Get surface height at world coordinates, checking chunks first then generator"""
+	if not _validate_coordinates(world_x, world_z):
+		print("World: ERROR - Invalid coordinates for surface height: ", world_x, ", ", world_z)
+		return 30.0  # Safe default
+	
 	# Try chunk data first
 	if chunk_manager:
 		var height = chunk_manager.get_surface_height(world_x, world_z)
-		if height > generator.sea_level:  # Valid height found
+		if height > (generator.sea_level if generator else 28.0):  # Valid height found
 			return height
 	
 	# Fallback to generator
@@ -217,6 +285,7 @@ func get_surface_height(world_x: float, world_z: float) -> float:
 		return max(generator.get_height(canonical_x, world_z, CHUNK_HEIGHT), generator.sea_level + 1.0)
 	
 	# Last resort fallback
+	print("World: WARNING - No generator available, using default height")
 	return 30.0
 
 func get_biome(world_x: float, world_z: float) -> int:
@@ -228,21 +297,32 @@ func get_biome(world_x: float, world_z: float) -> int:
 
 func edit_terrain(world_point: Vector3, amount: float) -> void:
 	"""Edit terrain at a world position"""
+	if not _validate_terrain_edit_inputs(world_point, amount):
+		return
+	
 	if verbose_logging:
 		print("World: Editing terrain at ", world_point, " with amount ", amount)
 	
 	var canonical_point = get_canonical_world_pos(world_point)
 	var chunk_pos = world_pos_to_chunk_pos(canonical_point)
 	
+	if not chunk_manager:
+		print("World: ERROR - No chunk manager available for terrain edit")
+		return
+	
 	var chunk = chunk_manager.get_chunk_at_chunk_position(chunk_pos)
 	if not is_instance_valid(chunk):
-		if verbose_logging:
-			print("World: ERROR - Chunk not found at position ", chunk_pos)
+		print("World: ERROR - Chunk not found at position ", chunk_pos, " for terrain edit")
 		return
 	
 	# Convert to local coordinates within the chunk
 	var chunk_world_pos = chunk_pos_to_world_pos(chunk_pos)
 	var local_pos = canonical_point - chunk_world_pos
+	
+	# Validate local position is within chunk bounds
+	if not _validate_local_chunk_position(local_pos):
+		print("World: ERROR - Local position out of chunk bounds: ", local_pos)
+		return
 	
 	if verbose_logging:
 		print("World: Local edit position: ", local_pos)
@@ -252,7 +332,8 @@ func edit_terrain(world_point: Vector3, amount: float) -> void:
 	
 	# Force regeneration of affected chunks
 	for pos in affected_chunks.keys():
-		chunk_manager.force_regenerate_chunk(pos)
+		if chunk_manager.is_chunk_loaded(pos):
+			chunk_manager.force_regenerate_chunk(pos)
 	
 	if verbose_logging:
 		print("World: Terrain edit complete. Affected chunks: ", affected_chunks.keys())
@@ -293,10 +374,13 @@ func _on_chunk_generation_completed(chunk_pos: Vector2i, result_data: Dictionary
 			result_data.biome_data
 		)
 		
-		# Emit signal for initial world ready state
+		# Emit signal for initial world ready state - wait one frame to ensure mesh is applied
 		if is_first_update and chunk_pos == Vector2i.ZERO:
 			is_first_update = false
-			call_deferred("emit_signal", "initial_chunks_generated")
+			# Wait a bit longer to ensure mesh is fully ready
+			await get_tree().process_frame
+			await get_tree().process_frame
+			initial_chunks_generated.emit()
 		
 		if verbose_logging:
 			print("World: Applied mesh data for chunk ", chunk_pos)
@@ -343,7 +427,8 @@ func create_biome_texture():
 	img.set_pixel(1, 3, mountain_rock)
 	
 	var texture = ImageTexture.create_from_image(img)
-	world_material.set_shader_parameter("texture_atlas", texture)
+	if world_material is ShaderMaterial:
+		(world_material as ShaderMaterial).set_shader_parameter("texture_atlas", texture)
 	
 	if verbose_logging:
 		print("World: Biome texture created and applied")
@@ -434,7 +519,9 @@ func enable_verbose_logging(enabled: bool = true):
 	"""Enable or disable verbose logging across all systems"""
 	verbose_logging = enabled
 	
-	if generator and generator.has_method("set"):
+	if generator and generator.has_method("set_verbose_logging"):
+		generator.set_verbose_logging(enabled)
+	elif generator and generator.has_method("set"):
 		generator.verbose_logging = enabled
 	
 	if chunk_manager:
@@ -444,6 +531,34 @@ func enable_verbose_logging(enabled: bool = true):
 		thread_manager.set_verbose_logging(enabled)
 	
 	print("World: Verbose logging ", "enabled" if enabled else "disabled")
+
+# === VALIDATION HELPERS ===
+
+func _validate_world_position(pos: Vector3) -> bool:
+	"""Validate world position is reasonable"""
+	return is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z) and abs(pos.y) < 10000.0
+
+func _validate_coordinates(x: float, z: float) -> bool:
+	"""Validate world coordinates are finite"""
+	return is_finite(x) and is_finite(z)
+
+func _validate_terrain_edit_inputs(world_point: Vector3, amount: float) -> bool:
+	"""Validate terrain edit inputs"""
+	if not _validate_world_position(world_point):
+		print("World: ERROR - Invalid world point for terrain edit: ", world_point)
+		return false
+	
+	if not is_finite(amount) or abs(amount) > 100.0:
+		print("World: ERROR - Invalid edit amount: ", amount)
+		return false
+	
+	return true
+
+func _validate_local_chunk_position(local_pos: Vector3) -> bool:
+	"""Validate position is within chunk bounds"""
+	return local_pos.x >= -1 and local_pos.x <= CHUNK_SIZE + 1 and \
+		   local_pos.z >= -1 and local_pos.z <= CHUNK_SIZE + 1 and \
+		   local_pos.y >= -1 and local_pos.y <= CHUNK_HEIGHT + 1
 
 # === LEGACY COMPATIBILITY ===
 

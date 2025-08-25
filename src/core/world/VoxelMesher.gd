@@ -15,17 +15,31 @@ var mesh_arrays: Array
 var biome_data: Array
 var voxel_data: Array
 
-# Debug flag for this mesher
+# Debug and performance tracking
 var debug_enabled: bool = false
+var generation_start_time: int = 0
+var vertex_count: int = 0
+var triangle_count: int = 0
+
+# Memory management
+var _cached_colors: Dictionary = {}
 
 func _init(p_chunk_pos, p_generator, p_tri_table, p_edge_table):
+	if not p_chunk_pos or not p_generator or not p_tri_table or not p_edge_table:
+		print("VoxelMesher: ERROR - Invalid parameters provided")
+		return
+	
 	chunk_position = p_chunk_pos
 	generator = p_generator
 	TRI_TABLE = p_tri_table
 	EDGE_TABLE = p_edge_table
 	
 	# Only enable debug for origin chunk or if generator has verbose logging
-	debug_enabled = (chunk_position == Vector2i.ZERO and generator.verbose_logging)
+	debug_enabled = (chunk_position == Vector2i.ZERO and generator.has_method("verbose_logging") and generator.verbose_logging)
+	
+	# Pre-cache biome colors for performance
+	_precache_biome_colors()
+	generation_start_time = Time.get_ticks_msec()
 
 # Helper functions for marching cubes
 func _corner_pos(x, y, z, i):
@@ -74,17 +88,40 @@ func _interpolate_edge(x, y, z, edge_index, data):
 	
 	return Vector3(a.x, a.y, a.z).lerp(Vector3(b.x, b.y, b.z), t)
 
-func run():
+func run() -> Dictionary:
+	if not _validate_dependencies():
+		return _create_error_result("Invalid dependencies")
+	
 	voxel_data = _generate_voxel_data()
+	if not voxel_data or voxel_data.is_empty():
+		return _create_error_result("Failed to generate voxel data")
+	
 	var padded_data = _get_padded_data(voxel_data)
+	if not padded_data:
+		return _create_error_result("Failed to create padded data")
+	
 	_generate_mesh(padded_data)
 	
-	return {
+	# Clean up temporary data to save memory
+	padded_data = null
+	
+	var generation_time = Time.get_ticks_msec() - generation_start_time
+	
+	var result = {
 		"chunk_position": chunk_position,
 		"voxel_data": voxel_data,
 		"mesh_arrays": mesh_arrays,
-		"biome_data": biome_data
+		"biome_data": biome_data,
+		"generation_time_ms": generation_time,
+		"vertex_count": vertex_count,
+		"triangle_count": triangle_count,
+		"success": true
 	}
+	
+	if debug_enabled:
+		print("VoxelMesher[%s]: Generated in %dms, %d vertices, %d triangles" % [chunk_position, generation_time, vertex_count, triangle_count])
+	
+	return result
 
 func _generate_voxel_data():
 	var data = []
@@ -122,11 +159,11 @@ func _generate_voxel_data():
 					var distance_from_surface = surface_height - world_y
 					
 					if distance_from_surface > 0:
-						# Above surface: solid with smooth transition
+						# Below surface: solid (positive density)
 						density = distance_from_surface * 0.4
 					else:
-						# Below surface: create smooth transition to air
-						density = distance_from_surface * 0.2
+						# Above surface: air (negative density)
+						density = distance_from_surface * 0.4
 				
 				# Clamp density to prevent extreme values
 				density = clamp(density, -2.0, 5.0)
@@ -169,9 +206,11 @@ func _get_padded_data(p_voxel_data):
 						var distance_from_surface = surface_height - world_y
 						
 						if distance_from_surface > 0:
+							# Below surface: solid (positive density)
 							padded[x][y][z] = distance_from_surface * 0.4
 						else:
-							padded[x][y][z] = distance_from_surface * 0.2
+							# Above surface: air (negative density)
+							padded[x][y][z] = distance_from_surface * 0.4
 					
 					# Clamp density values
 					padded[x][y][z] = clamp(padded[x][y][z], -2.0, 5.0)
@@ -179,11 +218,16 @@ func _get_padded_data(p_voxel_data):
 	return padded
 
 func _generate_mesh(padded_voxel_data):
+	if not padded_voxel_data or padded_voxel_data.is_empty():
+		print("VoxelMesher: ERROR - Invalid padded voxel data")
+		mesh_arrays = []
+		return
+	
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	
-	var triangle_count = 0
-	var vertex_count = 0
+	triangle_count = 0
+	vertex_count = 0
 
 	for x in range(CHUNK_WIDTH):
 		for y in range(CHUNK_HEIGHT):
@@ -194,26 +238,9 @@ func _generate_mesh(padded_voxel_data):
 				
 				var biome = biome_data[x][z]
 				
-				# Set color based on biome
-				match biome:
-					WorldData.Biome.TUNDRA:
-						st.set_color(Color(0.95, 0.95, 1.0, 1.0))
-					WorldData.Biome.FOREST:
-						st.set_color(Color(0.15, 0.50, 0.20, 1.0))
-					WorldData.Biome.PLAINS:
-						st.set_color(Color(0.2, 0.8, 0.3, 1.0))
-					WorldData.Biome.DESERT:
-						st.set_color(Color(0.95, 0.85, 0.65, 1.0))
-					WorldData.Biome.MOUNTAINS:
-						st.set_color(Color(0.7, 0.7, 0.7, 1.0))
-					WorldData.Biome.JUNGLE:
-						st.set_color(Color(0.1, 0.6, 0.15, 1.0))
-					WorldData.Biome.SWAMP:
-						st.set_color(Color(0.15, 0.45, 0.15, 1.0))
-					WorldData.Biome.OCEAN:
-						st.set_color(Color(0.05, 0.3, 0.6, 1.0))
-					_:
-						st.set_color(Color(0.2, 0.8, 0.3, 1.0))
+				# Set color based on biome (using cached colors)
+				var biome_color = _cached_colors.get(biome, Color(0.2, 0.8, 0.3, 1.0))
+				st.set_color(biome_color)
 
 				# Bounds check for padded data
 				if x + 1 >= padded_voxel_data.size() or y + 1 >= padded_voxel_data[0].size() or z + 1 >= padded_voxel_data[0][0].size():
@@ -260,8 +287,8 @@ func _generate_mesh(padded_voxel_data):
 					var b = _interpolate_edge(x, y, z, tri_indices[i+1], padded_voxel_data)
 					var c = _interpolate_edge(x, y, z, tri_indices[i+2], padded_voxel_data)
 					
-					# Only add valid vertices
-					if a != Vector3(x, y, z) and b != Vector3(x, y, z) and c != Vector3(x, y, z):
+					# Only add valid, non-degenerate triangles
+					if _is_valid_triangle(a, b, c, Vector3(x, y, z)):
 						st.add_vertex(a)
 						st.add_vertex(b)
 						st.add_vertex(c)
@@ -285,3 +312,40 @@ func _generate_mesh(padded_voxel_data):
 			mesh = optimized_mesh
 	
 	mesh_arrays = mesh.surface_get_arrays(0) if mesh.get_surface_count() > 0 else []
+
+func _precache_biome_colors():
+	"""Pre-cache biome colors for performance"""
+	_cached_colors[WorldData.Biome.TUNDRA] = Color(0.95, 0.95, 1.0, 1.0)
+	_cached_colors[WorldData.Biome.FOREST] = Color(0.15, 0.50, 0.20, 1.0)
+	_cached_colors[WorldData.Biome.PLAINS] = Color(0.2, 0.8, 0.3, 1.0)
+	_cached_colors[WorldData.Biome.DESERT] = Color(0.95, 0.85, 0.65, 1.0)
+	_cached_colors[WorldData.Biome.MOUNTAINS] = Color(0.7, 0.7, 0.7, 1.0)
+	_cached_colors[WorldData.Biome.JUNGLE] = Color(0.1, 0.6, 0.15, 1.0)
+	_cached_colors[WorldData.Biome.SWAMP] = Color(0.15, 0.45, 0.15, 1.0)
+	_cached_colors[WorldData.Biome.OCEAN] = Color(0.05, 0.3, 0.6, 1.0)
+
+func _validate_dependencies() -> bool:
+	"""Validate all required dependencies are available"""
+	return generator != null and TRI_TABLE != null and EDGE_TABLE != null and \
+		   TRI_TABLE.size() > 0 and EDGE_TABLE.size() > 0
+
+func _create_error_result(error_msg: String) -> Dictionary:
+	"""Create error result dictionary"""
+	print("VoxelMesher[%s]: ERROR - %s" % [chunk_position, error_msg])
+	return {
+		"chunk_position": chunk_position,
+		"voxel_data": [],
+		"mesh_arrays": [],
+		"biome_data": [],
+		"success": false,
+		"error": error_msg,
+		"generation_time_ms": Time.get_ticks_msec() - generation_start_time
+	}
+
+func _is_valid_triangle(a: Vector3, b: Vector3, c: Vector3, fallback: Vector3) -> bool:
+	"""Check if triangle vertices form a valid, non-degenerate triangle"""
+	# Check triangle has non-zero area (simplified check)
+	var edge1 = b - a
+	var edge2 = c - a
+	var cross = edge1.cross(edge2)
+	return cross.length_squared() > 0.000001  # Very small threshold to avoid filtering valid triangles

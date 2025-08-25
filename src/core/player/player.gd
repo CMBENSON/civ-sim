@@ -1,5 +1,8 @@
 extends CharacterBody3D
 
+# Import PlayerInteraction class
+const PlayerInteraction = preload("res://src/core/player/PlayerInteraction.gd")
+
 const WALK_SPEED = 8.0
 const FLY_SPEED = 25.0
 const JUMP_VELOCITY = 4.5
@@ -12,10 +15,9 @@ const MOUSE_SENSITIVITY = 0.002
 var world_node = null
 var is_flying = false  # Toggle between walking and flying
 
-# Terrain editing settings
-var edit_strength = 2.0
-var edit_mode = "remove"  # "add" or "remove"
+# Interaction system
 var is_editing = false
+var interaction_timer = 0.0
 
 func _ready():
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -28,6 +30,10 @@ func _ready():
 		var collision_body = CollisionShape3D.new()
 		collision_body.shape = collision_shape
 		add_child(collision_body)
+	
+	# Validate node structure
+	if not _validate_node_structure():
+		print("Player: WARNING - Node structure validation failed")
 	
 	print("Controls:")
 	print("  WASD/Arrow Keys - Move")
@@ -56,42 +62,32 @@ func _unhandled_input(event):
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		return
 
-	# Terrain editing
+	# Interaction handling
 	if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-		# Left click - remove terrain
+		# Left click - interact based on current mode
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			is_editing = event.is_pressed()
 			if event.is_pressed():
-				is_editing = true
-				edit_mode = "remove"
-			else:
-				is_editing = false
+				_handle_interaction()
 		
-		# Right click - add terrain
+		# Right click - inspect
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.is_pressed():
-				is_editing = true
-				edit_mode = "add"
-			else:
-				is_editing = false
+				_handle_inspection()
 	
-	# Adjust edit strength
-	if event is InputEventKey:
-		if event.pressed:
-			if event.keycode == KEY_Q:
-				edit_strength = max(0.5, edit_strength - 0.5)
-				print("Edit strength: ", edit_strength)
-			elif event.keycode == KEY_E:
-				edit_strength = min(5.0, edit_strength + 0.5)
-				print("Edit strength: ", edit_strength)
-			elif event.keycode == KEY_F:
-				is_flying = !is_flying
-				print("Mode: ", "Flying" if is_flying else "Walking")
-				if is_flying:
-					# Reset velocity when switching to flying
-					velocity = Vector3.ZERO
-			elif event.keycode == KEY_T:
-				# Debug: Test terrain editing
-				test_terrain_edit()
+	# Key handling
+	if event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_Q:
+				_adjust_edit_strength(-0.5)
+			KEY_E:
+				_adjust_edit_strength(0.5)
+			KEY_F:
+				_toggle_flight_mode()
+			KEY_I:
+				_cycle_interaction_mode()
+			KEY_T:
+				_test_terrain_edit()
 
 func _physics_process(delta):
 	if is_flying:
@@ -100,66 +96,108 @@ func _physics_process(delta):
 		PlayerMovement.handle_walking_movement(self, delta)
 	
 	# Handle continuous terrain editing
-	if is_editing and world_node != null:
-		perform_terrain_edit()
-	elif is_editing and world_node == null:
-		print("Player: ERROR - Cannot edit terrain, world_node is null!")
+	if is_editing and _can_interact():
+		PlayerInteraction.handle_continuous_edit(self, world_node, delta)
+	elif is_editing and not _can_interact():
+		print("Player: Cannot edit terrain - invalid world reference")
 		is_editing = false
 
-func perform_terrain_edit():
-	if not raycast.is_colliding():
-		print("Player: Raycast not colliding - cannot edit terrain")
+func _handle_interaction():
+	"""Handle primary interaction (left click)"""
+	if not _can_interact():
 		return
 	
-	var collision_point = raycast.get_collision_point()
-	var collision_normal = raycast.get_collision_normal()
-	
-	print("Player: Raycast hit at ", collision_point, " with normal ", collision_normal)
-	
-	# Offset the edit point slightly based on the mode
-	if edit_mode == "add":
-		collision_point += collision_normal * 0.5
-		print("Player: Adding terrain at ", collision_point)
-	else:  # remove
-		collision_point -= collision_normal * 0.5
-		print("Player: Removing terrain at ", collision_point)
-	
-	var strength = edit_strength if edit_mode == "add" else -edit_strength
-	print("Player: Calling world.edit_terrain with strength ", strength)
-	
-	if world_node != null:
-		world_node.edit_terrain(collision_point, strength)
+	var current_mode = PlayerInteraction.current_mode
+	if current_mode == PlayerInteraction.InteractionMode.INSPECT:
+		_handle_inspection()
 	else:
-		print("Player: ERROR - world_node is null!")
+		PlayerInteraction.handle_terrain_edit(self, world_node, current_mode)
 
-func test_terrain_edit():
+func _handle_inspection():
+	"""Handle world inspection"""
+	if not _can_interact():
+		return
+	
+	var info = PlayerInteraction.handle_inspection(self, world_node)
+	if info.has("error"):
+		print("Player: Inspection failed - ", info.error)
+	else:
+		print("=== WORLD INSPECTION ===")
+		for key in info:
+			print("  ", key, ": ", info[key])
+		print("========================")
+
+func _test_terrain_edit():
+	"""Debug function to test terrain editing"""
 	print("=== DEBUG: Testing terrain edit ===")
 	print("Player position: ", global_position)
-	print("Camera rotation: ", camera.rotation)
-	print("Raycast target: ", raycast.target_position)
-	print("Raycast enabled: ", raycast.enabled)
-	print("Raycast collision: ", raycast.is_colliding())
+	print("World node valid: ", _can_interact())
+	print("Current interaction mode: ", PlayerInteraction.current_mode)
+	print("Edit parameters: ", PlayerInteraction.get_edit_parameters())
 	
-	if raycast.is_colliding():
-		print("Raycast hit point: ", raycast.get_collision_point())
-		print("Raycast hit normal: ", raycast.get_collision_normal())
-		print("Raycast hit object: ", raycast.get_collider())
+	if _validate_node_structure():
+		print("Camera rotation: ", camera.rotation)
+		print("Raycast target: ", raycast.target_position)
+		print("Raycast enabled: ", raycast.enabled)
+		print("Raycast collision: ", raycast.is_colliding())
 		
-		# Try to edit terrain at the hit point
-		var collision_point = raycast.get_collision_point()
-		if world_node != null:
-			print("Calling world.edit_terrain with point ", collision_point, " and strength 2.0")
-			world_node.edit_terrain(collision_point, 2.0)
+		if raycast.is_colliding():
+			print("Raycast hit point: ", raycast.get_collision_point())
+			print("Raycast hit normal: ", raycast.get_collision_normal())
+			print("Raycast hit object: ", raycast.get_collider())
+			
+			# Test interaction
+			var success = PlayerInteraction.handle_terrain_edit(self, world_node, PlayerInteraction.InteractionMode.TERRAIN_ADD)
+			print("Terrain edit result: ", "SUCCESS" if success else "FAILED")
 		else:
-			print("ERROR: world_node is null!")
+			print("Raycast not hitting anything - try looking down at terrain")
 	else:
-		print("Raycast not hitting anything!")
-		print("Try looking down at the terrain")
+		print("Node structure validation failed")
+	
 	print("=== END DEBUG ===")
+
+func _can_interact() -> bool:
+	"""Check if player can interact with the world"""
+	return is_instance_valid(world_node) and world_node.has_method("edit_terrain")
+
+func _validate_node_structure() -> bool:
+	"""Validate required node structure"""
+	if not has_node("Head"):
+		print("Player: Missing Head node")
+		return false
+	if not has_node("Head/Camera3D"):
+		print("Player: Missing Camera3D node")
+		return false
+	if not has_node("Head/Camera3D/RayCast3D"):
+		print("Player: Missing RayCast3D node")
+		return false
+	return true
+
+func _adjust_edit_strength(delta: float):
+	"""Adjust terrain editing strength"""
+	var params = PlayerInteraction.get_edit_parameters()
+	var new_strength = clamp(params.strength + delta, 0.5, 5.0)
+	PlayerInteraction.set_edit_parameters(new_strength)
+
+func _toggle_flight_mode():
+	"""Toggle between walking and flying modes"""
+	is_flying = !is_flying
+	print("Player: Mode changed to ", "Flying" if is_flying else "Walking")
+	if is_flying:
+		velocity = Vector3.ZERO
+
+func _cycle_interaction_mode():
+	"""Cycle through interaction modes"""
+	PlayerInteraction.cycle_interaction_mode()
+
+func get_interaction_help() -> Array:
+	"""Get current interaction help text"""
+	return PlayerInteraction.get_interaction_help()
 
 func _exit_tree():
 	# Ensure proper cleanup
 	print("Player: Cleaning up...")
 	if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	is_editing = false
 	print("Player: Cleanup complete")

@@ -3,7 +3,7 @@ extends RefCounted
 class_name ProficiencySystem
 
 signal proficiency_gained(skill: Skill, amount: float, new_level: float)
-signal trait_unlocked(trait: String, description: String)
+signal trait_unlocked(trait_name: String, description: String)
 signal breakthrough_achieved(skill: Skill, combination: Array)
 
 enum Skill {
@@ -239,17 +239,17 @@ func get_skill_modifier(skill: Skill, context: Dictionary = {}) -> float:
 	
 	# Trait bonuses
 	for trait_name in traits:
-		var trait = traits[trait_name]
-		match trait.type:
+		var trait_data = traits[trait_name]
+		match trait_data.type:
 			"behavioral":
-				var effects = trait.get("effects", {})
+				var effects = trait_data.get("effects", {})
 				if effects.has("primary_skill") and effects.primary_skill == skill:
 					modifier += effects.get("proficiency_bonus", 0.0)
 				if effects.has("movement_speed_bonus") and skill == Skill.EXPLORING:
 					modifier += effects.movement_speed_bonus
 			"breakthrough":
-				if skill in trait.skills:
-					modifier += trait.get("bonus", 1.0) - 1.0  # Convert to additive
+				if skill in trait_data.skills:
+					modifier += trait_data.get("bonus", 1.0) - 1.0  # Convert to additive
 	
 	return modifier
 
